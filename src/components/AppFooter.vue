@@ -23,8 +23,7 @@ const currentYear = computed(() => new Date().getFullYear());
   color: white;
   margin-top: auto;
   border-radius: 24px 24px 0 0;
-  box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.04);
-}
+  box-shadow: 0 0 24px 0 rgba(239,68,68,0.13), 0 0 8px 0 rgba(0,0,0,0.07);}
 
 .footer-container {
   max-width: 980px;

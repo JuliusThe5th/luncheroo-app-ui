@@ -5,6 +5,16 @@ import AppHeader from "./components/AppHeader.vue";
 </script>
 
 <template>
+  <head>
+    <title>Luncheroo</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Luncheroo - Your lunch companion" />
+    <link rel="icon" type="image/png" href="../assets/images/logo-no-background.png" />
+    <link rel="apple-touch-icon" href="../assets/images/logo-no-background.png" />
+    <link rel="manifest" href="../manifest.json" />
+    <meta name="theme-color" content="#ef4444" />
+  </head>
   <div class="app-container">
     <AppHeader />
     <RouterView />
@@ -43,7 +53,7 @@ html, body {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  overflow-x: hidden;
+  overflow-x: visible;
   /* Add background for fallback */
   background: transparent;
 }

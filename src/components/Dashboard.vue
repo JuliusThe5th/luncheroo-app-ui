@@ -338,26 +338,35 @@ function mockUserAndLunchData() {
 }
 .dashboard-btn-blue {
   background: linear-gradient(90deg, #3b82f6 70%, #2563eb 100%);
+  background-size: 300% 100%;
+  background-position: 50% 100%;
+  transition: background-position 0.4s, transform 0.18s;
   color: #fff;
 }
 .dashboard-btn-blue:hover {
-  background: linear-gradient(90deg, #2563eb 70%, #3b82f6 100%);
+  background-position: 100% 20%;
   transform: translateY(-2px) scale(1.04);
 }
 .dashboard-btn-green {
   background: linear-gradient(90deg, #22c55e 70%, #16a34a 100%);
+  background-size: 300% 100%;
+  background-position: 50% 100%;
+  transition: background-position 0.4s, transform 0.18s;
   color: #fff;
 }
 .dashboard-btn-green:hover {
-  background: linear-gradient(90deg, #16a34a 70%, #22c55e 100%);
+  background-position: 100% 20%;
   transform: translateY(-2px) scale(1.04);
 }
 .dashboard-btn-red {
   background: linear-gradient(90deg, #ef4444 70%, #b91c1c 100%);
+  background-size: 300% 100%;
+  background-position: 50% 100%;
+  transition: background-position 0.4s, transform 0.18s;
   color: #fff;
 }
 .dashboard-btn-red:hover {
-  background: linear-gradient(90deg, #b91c1c 70%, #ef4444 100%);
+  background-position: 100% 20%;
   transform: translateY(-2px) scale(1.04);
 }
 .dashboard-btn-logout {

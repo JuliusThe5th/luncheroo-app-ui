@@ -7,7 +7,7 @@
 <style scoped>
 .dashboard-header {
   background: rgb(174, 174, 174);
-  box-shadow: 0 2px 8px rgba(239,68,68,0.08);
+  box-shadow: 0 0 24px 0 rgba(239,68,68,0.13), 0 0 8px 0 rgba(0,0,0,0.07);
   text-align: center;
   padding: 40px 0 24px 0;
   border-radius: 0 0 32px 32px;
@@ -30,3 +30,5 @@ header img:hover {
   }
 }
 </style>
+<script setup lang="ts">
+</script>

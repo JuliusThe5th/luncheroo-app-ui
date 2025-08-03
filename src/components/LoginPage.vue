@@ -237,6 +237,11 @@ async function checkAuthentication() {
   border-radius: var(--radius-medium);
   box-shadow: 0 4px 24px rgba(239,68,68,0.08), 0 1.5px 8px rgba(0,0,0,0.04);
   box-sizing: border-box;
+  transition: box-shadow 0.2s;
+}
+
+.login-content:hover{
+  box-shadow: 0 8px 32px rgba(239,68,68,0.13), 0 2px 12px rgba(0,0,0,0.07);
 }
 
 .logo {
