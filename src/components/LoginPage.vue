@@ -1,20 +1,3 @@
-<template>
-  <div class="login-container">
-    <div class="login-content">
-      <img src="../assets/images/logo-no-background.png" alt="Logo" class="logo" />
-      <h1 class="welcome-heading">Welcome to Luncheroo</h1>
-      <p class="welcome-text">Your lunch management solution</p>
-
-      <!-- Custom Google Sign-In button instead of the auto-rendered one -->
-      <button class="google-signin-button" @click="signInWithGoogle">
-        <img src="../assets/images/web_light_rd_SI@1x.png" alt="Sign in with Google" />
-      </button>
-
-      <p v-if="loginError" class="login-error">{{ loginError }}</p>
-    </div>
-  </div>
-</template>
-
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
@@ -117,7 +100,7 @@ async function handleOAuthResponse(tokenResponse) {
     logAuth('User profile retrieved from Google', {
       given_name: userInfo.given_name,
       family_name: userInfo.family_name,
-      email: userInfo.email,
+      picture: userInfo.picture,
       sub: userInfo.sub
     });
 
@@ -155,6 +138,7 @@ async function handleOAuthResponse(tokenResponse) {
     // Just store the user's name for the UI and a flag that we're authenticated
     localStorage.setItem('is_authenticated', 'true');
     localStorage.setItem('user_name', userInfo.name);
+    localStorage.setItem('picture', userInfo.picture);
     logAuth('Authentication data stored in localStorage');
 
     // Redirect to dashboard
@@ -196,17 +180,47 @@ async function checkAuthentication() {
 }
 </script>
 
+<template>
+  <div class="login-page">
+    <div class="login-container">
+      <div class="login-content">
+        <img src="../assets/images/logo-no-background.png" alt="Logo" class="logo" />
+        <h1 class="welcome-heading">Welcome to Luncheroo</h1>
+        <p class="welcome-text">Your lunch management solution</p>
+
+        <!-- Custom Google Sign-In button instead of the auto-rendered one -->
+        <button class="google-signin-button" @click="signInWithGoogle">
+          <img src="../assets/images/branding_guideline_sample_nt_rd_lg.svg" alt="Sign in with Google" />
+        </button>
+
+        <p v-if="loginError" class="login-error">{{ loginError }}</p>
+      </div>
+    </div>
+  </div>
+</template>
+
+
+
 <style scoped>
+.login-page {
+  display: flex;
+  flex-direction: column;
+  height: 70vh;
+  width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
 .login-container {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100vh;
+  flex: 1;
   width: 100%;
   box-sizing: border-box;
-  overflow: hidden;
-  padding: 0;
+  padding: 2rem 0;
+  overflow-x: hidden;
 }
 
 .login-content {
@@ -214,14 +228,19 @@ async function checkAuthentication() {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  max-width: 500px;
+  max-width: 440px;
   text-align: center;
-  width: 100%;
+  width: calc(100% - 2rem);
   margin: 0 auto;
+  padding: 2.5rem;
+  background-color: var(--color-background);
+  border-radius: var(--radius-medium);
+  box-shadow: 0 4px 24px rgba(239,68,68,0.08), 0 1.5px 8px rgba(0,0,0,0.04);
+  box-sizing: border-box;
 }
 
 .logo {
-  width: 220px;
+  width: 180px;
   margin-bottom: 30px;
 }
 
@@ -230,11 +249,12 @@ async function checkAuthentication() {
   font-weight: 600;
   color: var(--color-heading);
   margin-bottom: 8px;
+  letter-spacing: -0.5px;
 }
 
 .welcome-text {
   font-size: 18px;
-  color: var(--color-text);
+  color: var(--color-text-light);
   margin-bottom: 40px;
   font-weight: 300;
 }
@@ -245,19 +265,46 @@ async function checkAuthentication() {
   cursor: pointer;
   padding: 0;
   transition: transform 0.2s ease;
+  margin-bottom: 1.5rem;
 }
 
 .google-signin-button:hover {
   transform: scale(1.05);
 }
 
+.google-signin-button:active {
+  transform: scale(0.98);
+}
+
 .google-signin-button img {
-  width: 250px;
+  width: 220px;
 }
 
 .login-error {
   margin-top: 20px;
-  color: #e74c3c;
+  color: var(--color-error);
   font-size: 14px;
+  padding: 10px 15px;
+  background-color: rgba(255, 59, 48, 0.1);
+  border-radius: var(--radius-small);
+  width: 100%;
+}
+
+@media (max-width: 640px) {
+  .login-content {
+    padding: 1.5rem;
+  }
+
+  .logo {
+    width: 150px;
+  }
+
+  .welcome-heading {
+    font-size: 24px;
+  }
+
+  .welcome-text {
+    font-size: 16px;
+  }
 }
 </style>

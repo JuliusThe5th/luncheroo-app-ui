@@ -1,55 +1,65 @@
-/* color palette from <https://github.com/vuejs/theme> */
+/* color palette for Apple-inspired design */
 :root {
-  --vt-c-white: #ffffff;
-  --vt-c-white-soft: #f8f8f8;
-  --vt-c-white-mute: #f2f2f2;
+  /* Light mode colors */
+  --apple-white: #ffffff;
+  --apple-off-white: #f5f5f7;
+  --apple-light-gray: #e8e8ed;
+  --apple-medium-gray: #86868b;
+  --apple-dark-gray: #424245;
+  --apple-black: #1d1d1f;
+  --apple-blue: #0066cc;
+  --apple-light-blue: #147ce5;
+  --apple-red: #ff3b30;
 
-  --vt-c-black: #181818;
-  --vt-c-black-soft: #222222;
-  --vt-c-black-mute: #282828;
+  /* Semantic colors */
+  --color-background: var(--apple-white);
+  --color-background-soft: var(--apple-off-white);
+  --color-background-mute: var(--apple-light-gray);
 
-  --vt-c-indigo: #2c3e50;
+  --color-border: #d2d2d7;
+  --color-border-hover: var(--apple-medium-gray);
 
-  --vt-c-divider-light-1: rgba(60, 60, 60, 0.29);
-  --vt-c-divider-light-2: rgba(60, 60, 60, 0.12);
-  --vt-c-divider-dark-1: rgba(84, 84, 84, 0.65);
-  --vt-c-divider-dark-2: rgba(84, 84, 84, 0.48);
+  --color-heading: var(--apple-black);
+  --color-text: var(--apple-dark-gray);
+  --color-text-light: var(--apple-medium-gray);
 
-  --vt-c-text-light-1: var(--vt-c-indigo);
-  --vt-c-text-light-2: rgba(60, 60, 60, 0.66);
-  --vt-c-text-dark-1: var(--vt-c-white);
-  --vt-c-text-dark-2: rgba(235, 235, 235, 0.64);
-}
+  --color-accent: var(--apple-blue);
+  --color-accent-hover: var(--apple-light-blue);
+  --color-error: var(--apple-red);
 
-/* semantic color variables for this project */
-:root {
-  --color-background: var(--vt-c-white);
-  --color-background-soft: var(--vt-c-white-soft);
-  --color-background-mute: var(--vt-c-white-mute);
+  --section-gap: 40px;
 
-  --color-border: var(--vt-c-divider-light-2);
-  --color-border-hover: var(--vt-c-divider-light-1);
+  /* Border radius */
+  --radius-small: 6px;
+  --radius-medium: 10px;
+  --radius-large: 18px;
 
-  --color-heading: var(--vt-c-text-light-1);
-  --color-text: var(--vt-c-text-light-1);
-
-  --section-gap: 160px;
+  /* Shadows */
+  --shadow-light: 0 2px 10px rgba(0, 0, 0, 0.05);
+  --shadow-medium: 0 4px 20px rgba(0, 0, 0, 0.08);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-background: var(--vt-c-black);
-    --color-background-soft: var(--vt-c-black-soft);
-    --color-background-mute: var(--vt-c-black-mute);
+    /* Dark mode colors */
+    --color-background: #000000;
+    --color-background-soft: #1c1c1e;
+    --color-background-mute: #2c2c2e;
 
-    --color-border: var(--vt-c-divider-dark-2);
-    --color-border-hover: var(--vt-c-divider-dark-1);
+    --color-border: #424245;
+    --color-border-hover: #6e6e73;
 
-    --color-heading: var(--vt-c-text-dark-1);
-    --color-text: var(--vt-c-text-dark-2);
+    --color-heading: #f5f5f7;
+    --color-text: #e8e8ed;
+    --color-text-light: #86868b;
+
+    --color-accent: #0a84ff;
+    --color-accent-hover: #409cff;
+    --color-error: #ff453a;
   }
 }
 
+/* Reset & Base Styles */
 *,
 *::before,
 *::after {
@@ -63,24 +73,43 @@ body {
   color: var(--color-text);
   background: var(--color-background);
   transition:
-    color 0.5s,
-    background-color 0.5s;
-  line-height: 1.6;
+    color 0.3s,
+    background-color 0.3s;
+  line-height: 1.5;
   font-family:
-    Inter,
     -apple-system,
     BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    Oxygen,
-    Ubuntu,
-    Cantarell,
-    'Fira Sans',
-    'Droid Sans',
+    'SF Pro Text',
+    'San Francisco',
     'Helvetica Neue',
+    Helvetica,
+    Arial,
     sans-serif;
-  font-size: 15px;
+  font-size: 16px;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family:
+    'SF Pro Display',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--color-heading);
+}
+
+button {
+  font-family: inherit;
+  border-radius: var(--radius-small);
+  border: none;
+  padding: 10px 20px;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
