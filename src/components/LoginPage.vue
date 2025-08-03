@@ -34,24 +34,48 @@ onMounted(() => {
   loadGoogleScript();
 });
 
+function logAuth(message, data = null) {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] AUTH: ${message}`);
+  if (data) {
+    console.log('→ Data:', data);
+  }
+}
+
+// Update loadGoogleScript function to include logging
 function loadGoogleScript() {
-  if (document.getElementById('google-signin-script')) return;
+  logAuth('Loading Google authentication script');
+
+  if (document.getElementById('google-signin-script')) {
+    logAuth('Google script already loaded, skipping');
+    return;
+  }
 
   const script = document.createElement('script');
   script.id = 'google-signin-script';
   script.src = 'https://accounts.google.com/gsi/client';
   script.async = true;
   script.defer = true;
+  script.onload = () => {
+    logAuth('Google authentication script loaded successfully');
+  };
+  script.onerror = (error) => {
+    logAuth('Failed to load Google authentication script', error);
+    loginError.value = 'Failed to load authentication services';
+  };
   document.head.appendChild(script);
 }
 
 function signInWithGoogle() {
+  logAuth('Google Sign-In button clicked');
+
   if (!window.google || !window.google.accounts) {
-    console.error('Google API not loaded yet');
+    logAuth('Google API not available yet');
     loginError.value = 'Google Sign-In is not available right now. Please try again.';
     return;
   }
 
+  logAuth('Initializing Google OAuth token client');
   // Use the less problematic auth flow
   const client = window.google.accounts.oauth2.initTokenClient({
     client_id: googleClientId,
@@ -60,18 +84,23 @@ function signInWithGoogle() {
   });
 
   // Request an access token
+  logAuth('Requesting OAuth token from Google');
   client.requestAccessToken();
 }
 
+// Update handleOAuthResponse function to include logging
 async function handleOAuthResponse(tokenResponse) {
   if (tokenResponse.error) {
-    console.error('OAuth error:', tokenResponse.error);
+    logAuth('OAuth error received', tokenResponse.error);
     loginError.value = 'Authentication failed. Please try again.';
     return;
   }
 
+  logAuth('OAuth token received successfully');
+
   try {
     // Exchange the token for user info
+    logAuth('Fetching user profile from Google');
     const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
       headers: {
         'Authorization': `Bearer ${tokenResponse.access_token}`
@@ -79,15 +108,21 @@ async function handleOAuthResponse(tokenResponse) {
     });
 
     if (!userInfoResponse.ok) {
+      const error = await userInfoResponse.text();
+      logAuth('Failed to get user info from Google', { status: userInfoResponse.status, error });
       throw new Error('Failed to get user info');
     }
 
     const userInfo = await userInfoResponse.json();
-
-    // Log user info for debugging
-    console.log('User info from Google:', userInfo);
+    logAuth('User profile retrieved from Google', {
+      given_name: userInfo.given_name,
+      family_name: userInfo.family_name,
+      email: userInfo.email,
+      sub: userInfo.sub
+    });
 
     // Send user info to your backend
+    logAuth('Sending authentication data to backend');
     const verificationResponse = await fetch(`/api/verify-token`, {
       method: 'POST',
       headers: {
@@ -95,76 +130,67 @@ async function handleOAuthResponse(tokenResponse) {
       },
       body: JSON.stringify({
         email: userInfo.email,
-        name: userInfo.name,
-        sub: userInfo.sub, // Google's user ID
+        fullName: userInfo.name,
+        sub: userInfo.sub,
         picture: userInfo.picture
-      })
+      }),
+      credentials: 'include' // Important: This tells fetch to include cookies in the request
     });
 
-    // Check if response is ok before trying to parse JSON
+    // Check if response is ok before proceeding
     if (!verificationResponse.ok) {
-      // Try to get the error message from response
       const errorText = await verificationResponse.text();
-      console.error('Verification response error:', errorText);
+      logAuth('Backend token verification failed', {
+        status: verificationResponse.status,
+        statusText: verificationResponse.statusText,
+        error: errorText
+      });
       throw new Error(`Token verification failed: ${verificationResponse.status} ${verificationResponse.statusText}`);
     }
 
-    // Log the raw response for debugging
-    const responseText = await verificationResponse.text();
-    console.log('Raw verification response:', responseText);
+    const authData = await verificationResponse.json();
+    logAuth('Authentication successful with backend', { message: authData.message });
 
-    // Parse the response as JSON if it's not empty
-    let authData;
-    try {
-      authData = responseText ? JSON.parse(responseText) : {};
-    } catch (e) {
-      console.error('Error parsing JSON response:', e);
-      throw new Error('Invalid response from server');
-    }
-
-    if (!authData.token) {
-      throw new Error('No token received from server');
-    }
-
-    // Store token in localStorage instead of using cookies
-    localStorage.setItem('auth_token', authData.token);
+    // With cookie-based auth, we don't need to store the token
+    // Just store the user's name for the UI and a flag that we're authenticated
+    localStorage.setItem('is_authenticated', 'true');
     localStorage.setItem('user_name', userInfo.name);
+    logAuth('Authentication data stored in localStorage');
 
     // Redirect to dashboard
+    logAuth('Redirecting to dashboard');
     router.push('/dashboard');
   } catch (error) {
-    console.error('Authentication error:', error);
+    logAuth('Authentication error', { message: error.message, stack: error.stack });
     loginError.value = `Authentication failed: ${error.message}`;
   }
 }
 
+// Update checkAuthentication function to include logging
 async function checkAuthentication() {
+  logAuth('Checking existing authentication');
+
   try {
-    const token = localStorage.getItem('auth_token');
-
-    if (!token) {
-      // No token found
-      return;
-    }
-
-    // Verify the token with the backend
+    // With cookie authentication, we don't need to pass the token in headers
+    logAuth('Validating authentication with backend');
     const response = await fetch(`/api/user-info`, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
+      credentials: 'include' // Include cookies in the request
     });
 
     if (response.ok) {
-      // Token is valid, redirect to dashboard
+      logAuth('Authentication verified successfully');
+      // Authentication is valid, redirect to dashboard
       router.push('/dashboard');
     } else {
-      // Token is invalid, remove it
-      localStorage.removeItem('auth_token');
+      logAuth('Authentication invalid or expired', { status: response.status });
+      // Authentication failed, remove auth flag
+      localStorage.removeItem('is_authenticated');
       localStorage.removeItem('user_name');
+      logAuth('Cleared authentication data from localStorage');
     }
   } catch (error) {
-    console.error('Authentication check error:', error);
-    localStorage.removeItem('auth_token');
+    logAuth('Authentication check error', { message: error.message });
+    localStorage.removeItem('is_authenticated');
     localStorage.removeItem('user_name');
   }
 }
