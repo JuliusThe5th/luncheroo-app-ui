@@ -1,5 +1,6 @@
 // Script to generate ultra-smooth keyframes for orb animations
 // This will create 1000+ keyframes for 120+ FPS smooth motion
+
 function generateYinYangKeyframes() {
   const totalFrames = 1000;
   let keyframes = '';
@@ -90,4 +91,3 @@ ${secondaryKeyframes}}
 
 console.log('Generated keyframes:');
 console.log(completeCSS);
-

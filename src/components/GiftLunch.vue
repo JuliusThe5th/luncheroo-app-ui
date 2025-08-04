@@ -162,8 +162,12 @@ function goBack() {
                   :class="{ selected: selectedStudent && selectedStudent.id === student.id }"
                   @click="selectedStudent = student"
                 >
+                  <!-- Replace the .student-avatar div in the student-card -->
                   <div class="student-avatar">
-                    {{ student.full_name.charAt(0).toUpperCase() }}
+                    <img v-if="student.picture" :src="student.picture" alt="Profile" class="avatar-img" />
+                    <span v-else>
+                      {{ student.full_name.charAt(0).toUpperCase() }}
+                    </span>
                   </div>
                   <div class="student-info">
                     <h4 class="student-name">{{ student.full_name }}</h4>
@@ -421,6 +425,14 @@ function goBack() {
   justify-content: center;
   font-weight: var(--font-weight-bold);
   font-size: var(--font-size-lg);
+}
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--radius-full);
+  display: block;
 }
 
 .student-info {
