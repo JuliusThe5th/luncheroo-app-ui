@@ -1,243 +1,367 @@
-<!-- PublicPool.vue -->
-<script>
-import { ref, onMounted } from 'vue';
+<script setup>
+import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import { useAuth } from '../composables/useAuth.js';
+import { useNotifications } from '../composables/useNotifications.js';
+import { api, apiRequest } from '../utils/api.js';
 
-export default {
-  setup() {
-    const router = useRouter();
-    const poolLunches = ref([]);
-    const userHasLunch = ref(false);
+const router = useRouter();
+const { requireAuth } = useAuth();
+const { showError, showSuccess, clearNotification, message, messageType } = useNotifications();
 
-    onMounted(() => {
-      fetchPoolLunches();
-      checkUserLunchStatus();
+const pool = ref({ 1: 0, 2: 0, 3: 0 });
+const userHasLunch = ref(false);
+const isLoading = ref(false);
+const searchQuery = ref('');
+
+// Filtered lunches based on search
+const filteredLunches = computed(() => {
+  if (!searchQuery.value) return availableLunches.value;
+  return availableLunches.value.filter(lunch =>
+    lunch.student_name.toLowerCase().includes(searchQuery.value.toLowerCase())
+  );
+});
+
+onMounted(async () => {
+  // Check authentication
+  if (!requireAuth()) return;
+
+  // Fetch user lunch status and pool data
+  await fetchUserLunch();
+  await fetchPool();
+});
+
+async function fetchUserLunch() {
+  try {
+    const userData = await api.getUserInfo();
+    userHasLunch.value = userData.lunch?.hasLunch || false;
+  } catch (error) {
+    userHasLunch.value = false;
+  }
+}
+
+async function fetchPool() {
+  try {
+    isLoading.value = true;
+    const data = await apiRequest('/api/lunches');
+    pool.value = {
+      1: data["lunch 1"] || 0,
+      2: data["lunch 2"] || 0,
+      3: data["lunch 3"] || 0
+    };
+    isLoading.value = false;
+  } catch (error) {
+    showError('Failed to load lunch pool.');
+    isLoading.value = false;
+  }
+}
+
+async function donateLunch() {
+  try {
+    isLoading.value = true;
+    await apiRequest('/api/give_lunch', { method: 'POST' });
+    showSuccess('Your lunch was donated to the pool!');
+    userHasLunch.value = false;
+    await fetchPool();
+    isLoading.value = false;
+  } catch (error) {
+    showError('Failed to donate lunch.');
+    isLoading.value = false;
+  }
+}
+
+async function claimLunch(lunchNumber) {
+  try {
+    isLoading.value = true;
+    await apiRequest('/api/request_lunch', {
+      method: 'POST',
+      body: JSON.stringify({ lunch_id: lunchNumber })
     });
+    showSuccess(`You claimed lunch #${lunchNumber}!`);
+    userHasLunch.value = true;
+    await fetchPool();
+    isLoading.value = false;
+  } catch (error) {
+    showError('Failed to claim lunch.');
+    isLoading.value = false;
+  }
+}
 
-    const goBack = () => {
-      router.push('/dashboard');
-    };
-
-    const checkUserLunchStatus = async () => {
-      if (localStorage.getItem('lunchNumber')) {
-        userHasLunch.value = true;
-        return true;
-      }
-      else return false;
-    };
-
-    const fetchPoolLunches = async () => {
-      const response = await fetch('/api/lunches');
-      if (!response.ok) throw new Error('Failed to fetch lunch pool');
-      const data = await response.json();
-      poolLunches.value = Object.entries(data).map(([name, quantity]) => ({
-        name,
-        quantity
-      }));
-    };
-
-    const grabLunch = async (lunchId) => {
-      try {
-        const response = await fetch('/api/request_lunch', {
-          method: 'POST',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            lunch_id: lunchId
-          }),
-        });
-        fetchPoolLunches();
-        userHasLunch.value = true;
-      } catch (error) {
-        console.error('Error grabbing lunch:', error);
-      }
-    }
-
-    const giftLunch = async () => {
-      try {
-        const response = await fetch('/api/give_lunch', { method: 'POST' });
-        if (!response.ok) throw new Error('Failed to gift lunch');
-        await fetchPoolLunches();
-        userHasLunch.value = false;
-        fetchPoolLunches();
-      } catch (error) {
-        console.error('Error gifting lunch:', error);
-      }
-    };
-
-    return { poolLunches, userHasLunch, grabLunch, giftLunch, goBack };
-  },
-};
+function goBack() {
+  router.push('/dashboard');
+}
 </script>
 
 <template>
   <main class="public-pool-main">
-    <div class="public-pool-card">
-      <button class="public-pool-back-btn" @click="goBack">
-        ← Back to Dashboard
-      </button>
-      <h2 class="public-pool-title">Public Lunch Pool</h2>
-      <ul class="public-pool-list">
-        <li v-for="lunch in poolLunches" :key="lunch.name" class="public-pool-list-item">
-          <span class="public-pool-lunch-name">{{ lunch.name }}</span>
-          <span class="public-pool-lunch-qty">x{{ lunch.quantity }}</span>
-          <button
-            v-if="!userHasLunch"
-            @click="grabLunch(lunch.name.split(' ')[1])"
-            class="public-pool-btn public-pool-btn-green"
-          >
-            Grab
+    <div class="public-pool-container">
+      <div class="public-pool-card fade-in">
+        <div class="public-pool-header">
+          <button class="back-btn" @click="goBack">
+            <svg class="back-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+            Back to Dashboard
           </button>
-        </li>
-      </ul>
-      <div class="public-pool-actions">
-        <button
-            v-if="userHasLunch"
-            @click="giftLunch"
-            class="public-pool-btn public-pool-btn-blue"
-        >
-          Gift My Lunch
-        </button>
+
+          <h1 class="public-pool-title">Public Lunch Pool</h1>
+          <p class="public-pool-subtitle">Available lunches donated by other students</p>
+        </div>
+
+        <div class="public-pool-content">
+          <div v-if="message" class="alert" :class="`alert-${messageType}`" @click="clearNotification">
+            {{ message }}
+            <span class="alert-close">×</span>
+          </div>
+
+          <div class="lunches-section">
+            <div v-if="isLoading" class="loading-state">
+              <div class="spinner"></div>
+              <p>Loading lunch pool...</p>
+            </div>
+
+            <div v-else>
+              <h3 class="list-title">Lunch Pool</h3>
+              <div class="pool-grid">
+                <div v-for="num in [1,2,3]" :key="num" class="pool-card">
+                  <div class="pool-number">Lunch #{{ num }}</div>
+                  <div class="pool-qty">Available: <strong>{{ pool[num] }}</strong></div>
+                  <div class="pool-actions">
+                    <button v-if="!userHasLunch && pool[num] > 0" @click="claimLunch(num)" :disabled="isLoading" class="btn btn-primary claim-btn">
+                      Claim
+                    </button>
+                    <span v-else-if="!userHasLunch && pool[num] === 0" class="no-claim">None available</span>
+                  </div>
+                </div>
+              </div>
+              <div v-if="userHasLunch" class="donate-section">
+                <button @click="donateLunch" :disabled="isLoading" class="btn btn-secondary donate-btn">
+                  Donate My Lunch to Pool
+                </button>
+                <p class="donate-hint">You can donate your lunch for today to the pool.</p>
+              </div>
+              <div v-else-if="pool[1] === 0 && pool[2] === 0 && pool[3] === 0" class="empty-state">
+                <div class="empty-icon">🔄</div>
+                <h3>Pool is Empty</h3>
+                <p>No lunches have been donated to the public pool yet.</p>
+                <p>Check back later or ask friends to donate their lunches!</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </main>
 </template>
 
 <style scoped>
-@keyframes gradientMove {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-}
-
 .public-pool-main {
   flex: 1;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
   align-items: center;
-  padding: 40px 12px 24px 12px;
+  justify-content: center;
+  padding: var(--space-lg);
+  min-height: calc(100vh - 160px);
+}
+
+.public-pool-container {
+  width: 100%;
+  max-width: 800px;
+  position: relative;
+  z-index: 1;
 }
 
 .public-pool-card {
-  background: #fff;
-  border-radius: 24px;
-  box-shadow: 0 4px 24px rgba(239,68,68,0.08), 0 1.5px 8px rgba(0,0,0,0.04);
-  padding: 40px 32px;
-  max-width: 440px;
-  width: 100%;
-  margin-bottom: 32px;
-  position: relative;
-  z-index: 1;
-  transition: box-shadow 0.2s;
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+  transition: all var(--transition-normal);
 }
+
 .public-pool-card:hover {
-  box-shadow: 0 8px 32px rgba(239,68,68,0.13), 0 2px 12px rgba(0,0,0,0.07);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-brand);
+}
+
+.public-pool-header {
+  padding: var(--space-2xl);
+  background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
+  border-bottom: 1px solid var(--border-primary);
+  text-align: center;
+}
+
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  padding: var(--space-sm) 0;
+  margin-bottom: var(--space-lg);
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+}
+
+.back-btn:hover {
+  color: var(--brand-primary);
+}
+
+.back-icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
 }
 
 .public-pool-title {
-  font-size: 2rem;
-  font-weight: 700;
-  color: #ef4444;
-  margin-bottom: 18px;
-  text-align: center;
-  letter-spacing: -0.5px;
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  margin-bottom: var(--space-sm);
+  letter-spacing: -0.02em;
 }
 
-.public-pool-actions {
-  text-align: center;
-  margin-bottom: 18px;
-}
-
-.public-pool-list {
-  list-style: none;
-  padding: 0;
+.public-pool-subtitle {
+  font-size: var(--font-size-lg);
+  color: var(--text-secondary);
   margin: 0;
 }
 
-.public-pool-list-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: linear-gradient(90deg, #f9fafb 60%, #f3f4f6 100%);
-  border-radius: 12px;
-  padding: 14px 18px;
-  margin-bottom: 12px;
-  box-shadow: 0 1px 4px rgba(239,68,68,0.04);
-  font-size: 1.1rem;
+.public-pool-content {
+  padding: var(--space-2xl);
 }
 
-.public-pool-lunch-name {
-  font-weight: 600;
-  color: #ef4444;
+.lunches-section {
+  margin-bottom: var(--space-xl);
 }
 
-.public-pool-lunch-qty {
-  color: #6b7280;
-  margin: 0 16px;
-  font-size: 1rem;
+.loading-state {
+  text-align: center;
+  padding: var(--space-3xl);
+  color: var(--text-secondary);
 }
 
-.public-pool-btn {
-  display: inline-block;
-  margin: 0 0 0 8px;
-  padding: 10px 22px;
-  border-radius: 14px;
-  font-weight: 600;
-  font-size: 1rem;
-  text-decoration: none;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-  border: none;
-  cursor: pointer;
-  transition: background 0.18s, transform 0.18s;
-  outline: none;
+.loading-state .spinner {
+  margin: 0 auto var(--space-md);
 }
 
-.public-pool-btn-blue {
-  background: linear-gradient(90deg, #3b82f6 70%, #2563eb 100%);
-  color: #fff;
-}
-.public-pool-btn-blue:hover {
-  background-position: 100% 20%;
-  transform: translateY(-2px) scale(1.04);
+.no-results h3 {
+  color: var(--text-primary);
+  margin-bottom: var(--space-sm);
 }
 
-.public-pool-btn-green {
-  background: linear-gradient(90deg, #22c55e 70%, #16a34a 100%);
-  color: #fff;
-}
-.public-pool-btn-green:hover {
-  background-position: 100% 20%;
-  transform: translateY(-2px) scale(1.04);
+.no-results p {
+  color: var(--text-secondary);
+  margin: 0;
 }
 
-.public-pool-back-btn {
-  background: none;
-  border: none;
-  color: #6b7280;
-  font-size: 0.9rem;
-  cursor: pointer;
-  margin-bottom: 20px;
-  padding: 8px 0;
-  transition: color 0.2s;
+.list-title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin-bottom: var(--space-lg);
 }
 
-.public-pool-back-btn:hover {
-  color: #ef4444;
+.pool-grid {
+  display: grid;
+  gap: var(--space-lg);
 }
 
-@media (max-width: 640px) {
-  .public-pool-card {
-    padding: 18px 8px;
-    border-radius: 16px;
+.pool-card {
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+}
+
+.pool-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--brand-primary);
+  box-shadow: var(--shadow-md);
+}
+
+.pool-number {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  margin-bottom: var(--space-xs);
+}
+
+.pool-qty {
+  font-size: var(--font-size-lg);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.pool-actions {
+  margin-top: var(--space-md);
+}
+
+.no-claim {
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+}
+
+.donate-section {
+  margin-top: var(--space-xl);
+  text-align: center;
+}
+
+.donate-btn {
+  padding: var(--space-sm) var(--space-lg);
+}
+
+.donate-hint {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin-top: var(--space-xs);
+}
+
+.empty-state {
+  text-align: center;
+  padding: var(--space-3xl);
+}
+
+.empty-icon {
+  font-size: 4rem;
+  margin-bottom: var(--space-lg);
+}
+
+.empty-state h3 {
+  color: var(--text-primary);
+  margin-bottom: var(--space-sm);
+}
+
+.empty-state p {
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-sm) 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .public-pool-main {
+    padding: var(--space-md);
   }
+
+  .public-pool-header,
+  .public-pool-content {
+    padding: var(--space-lg);
+  }
+
   .public-pool-title {
-    font-size: 1.3rem;
+    font-size: var(--font-size-2xl);
   }
-  .public-pool-list-item {
-    font-size: 1rem;
-    padding: 10px 8px;
+
+  .claim-btn {
+    width: 100%;
   }
 }
 </style>

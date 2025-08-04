@@ -1,14 +1,18 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import { useAuth } from '../composables/useAuth.js';
+import { useNotifications } from '../composables/useNotifications.js';
+import { api } from '../utils/api.js';
 
 const router = useRouter();
+const { requireAuth } = useAuth();
+const { showError, showSuccess, clearNotification, message, messageType } = useNotifications();
+
 const students = ref([]);
-const selectedStudent = ref(null); // Changed to store student object instead of string
+const selectedStudent = ref(null);
 const searchQuery = ref('');
 const isLoading = ref(false);
-const message = ref('');
-const messageType = ref(''); // 'success' or 'error'
 const userHasLunch = ref(false);
 
 // Computed property for filtered students
@@ -20,58 +24,38 @@ const filteredStudents = computed(() => {
 });
 
 onMounted(async () => {
-  // Check if user is authenticated
-  const isAuthenticated = localStorage.getItem('is_authenticated');
-  if (!isAuthenticated) {
-    router.push('/');
-    return;
-  }
+  // Check authentication
+  if (!requireAuth()) return;
 
-  // Check if user has lunch to gift
-  await checkUserLunchStatus();
-
-  // Load students list
-  await loadStudents();
+  // Check if user has lunch to gift and load students
+  await Promise.all([
+    checkUserLunchStatus(),
+    loadStudents()
+  ]);
 });
 
 async function checkUserLunchStatus() {
   try {
-    const response = await fetch('/api/user-info', {
-      credentials: 'include'
-    });
+    const userData = await api.getUserInfo();
+    userHasLunch.value = userData.lunch?.hasLunch || false;
 
-    if (response.ok) {
-      const userData = await response.json();
-      userHasLunch.value = userData.lunch?.hasLunch || false;
-
-      if (!userHasLunch.value) {
-        message.value = "You don't have lunch to gift.";
-        messageType.value = 'error';
-      }
+    if (!userHasLunch.value) {
+      showError("You don't have lunch to gift.");
     }
   } catch (error) {
     console.error('Error checking lunch status:', error);
+    showError('Failed to check lunch status.');
   }
 }
 
 async function loadStudents() {
   try {
     isLoading.value = true;
-    const response = await fetch('/api/students', {
-      credentials: 'include'
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      students.value = data.students || [];
-    } else {
-      message.value = 'Failed to load students list.';
-      messageType.value = 'error';
-    }
+    const data = await api.getStudents();
+    students.value = data.students || [];
   } catch (error) {
     console.error('Error loading students:', error);
-    message.value = 'Error loading students list.';
-    messageType.value = 'error';
+    showError('Failed to load students list.');
   } finally {
     isLoading.value = false;
   }
@@ -79,48 +63,31 @@ async function loadStudents() {
 
 async function giftLunch() {
   if (!selectedStudent.value) {
-    message.value = 'Please select a student to gift your lunch to.';
-    messageType.value = 'error';
+    showError('Please select a student to gift your lunch to.');
     return;
   }
 
   if (!userHasLunch.value) {
-    message.value = "You don't have lunch to gift.";
-    messageType.value = 'error';
+    showError("You don't have lunch to gift.");
     return;
   }
 
   try {
     isLoading.value = true;
-    const response = await fetch('/api/give_lunch_direct', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      credentials: 'include',
-      body: JSON.stringify({
-        student_id: selectedStudent.value.id, // Send student ID instead of name
-      })
+
+    await api.giftLunch({
+      student_id: selectedStudent.value.id,
     });
 
-    if (response.ok) {
-      const data = await response.json();
-      message.value = `Successfully gifted your lunch to ${selectedStudent.value.full_name}!`;
-      messageType.value = 'success';
-      userHasLunch.value = false;
-      selectedStudent.value = null;
+    showSuccess(`Successfully gifted your lunch to ${selectedStudent.value.full_name}!`);
+    userHasLunch.value = false;
+    selectedStudent.value = null;
 
-      // Update localStorage to reflect that user no longer has lunch
-      localStorage.removeItem('lunchNumber');
-    } else {
-      const errorData = await response.json();
-      message.value = errorData.error || 'Failed to gift lunch.';
-      messageType.value = 'error';
-    }
+    // Update localStorage to reflect that user no longer has lunch
+    localStorage.removeItem('lunchNumber');
   } catch (error) {
     console.error('Error gifting lunch:', error);
-    message.value = 'Error occurred while gifting lunch.';
-    messageType.value = 'error';
+    showError(error.message || 'Failed to gift lunch.');
   } finally {
     isLoading.value = false;
   }
@@ -129,81 +96,119 @@ async function giftLunch() {
 function goBack() {
   router.push('/dashboard');
 }
-
-function clearMessage() {
-  message.value = '';
-  messageType.value = '';
-}
 </script>
 
 <template>
   <main class="gift-lunch-main">
-    <div class="gift-lunch-card">
-      <button class="gift-lunch-back-btn" @click="goBack">
-        ← Back to Dashboard
-      </button>
-
-      <h2 class="gift-lunch-title">Gift Your Lunch</h2>
-      <p class="gift-lunch-subtitle">Select a student to gift your lunch to</p>
-
-      <!-- Message display -->
-      <div v-if="message" class="gift-lunch-message" :class="messageType" @click="clearMessage">
-        {{ message }}
-        <span class="message-close">×</span>
-      </div>
-
-      <!-- Search bar -->
-      <div class="gift-lunch-search">
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="Search for a student..."
-          class="gift-lunch-search-input"
-          :disabled="!userHasLunch"
-        />
-      </div>
-
-      <!-- Students list -->
-      <div v-if="userHasLunch" class="gift-lunch-students">
-        <div v-if="isLoading" class="gift-lunch-loading">
-          Loading students...
-        </div>
-
-        <div v-else-if="filteredStudents.length === 0" class="gift-lunch-no-results">
-          <p v-if="searchQuery">No students found matching "{{ searchQuery }}"</p>
-          <p v-else>No students available</p>
-        </div>
-
-        <div v-else class="gift-lunch-student-list">
-          <div
-            v-for="student in filteredStudents"
-            :key="student.id"
-            class="gift-lunch-student-item"
-            :class="{ selected: selectedStudent && selectedStudent.id === student.id }"
-            @click="selectedStudent = student"
-          >
-            <span class="student-name">{{ student.full_name }}</span>
-            <span v-if="selectedStudent && selectedStudent.id === student.id" class="selected-indicator">✓</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Gift button -->
-      <div class="gift-lunch-actions">
-        <button
-          v-if="userHasLunch"
-          @click="giftLunch"
-          :disabled="!selectedStudent || isLoading"
-          class="gift-lunch-btn gift-lunch-btn-primary"
-        >
-          {{ isLoading ? 'Gifting...' : 'Gift Lunch' }}
-        </button>
-
-        <div v-else class="gift-lunch-no-lunch">
-          <p>You don't have lunch to gift today.</p>
-          <button @click="goBack" class="gift-lunch-btn gift-lunch-btn-secondary">
+    <div class="gift-lunch-container">
+      <div class="gift-lunch-card fade-in">
+        <div class="gift-lunch-header">
+          <button class="back-btn" @click="goBack">
+            <svg class="back-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
             Back to Dashboard
           </button>
+
+          <h1 class="gift-lunch-title">Gift Your Lunch</h1>
+          <p class="gift-lunch-subtitle">Select a student to share your meal with</p>
+        </div>
+
+        <div class="gift-lunch-content">
+          <!-- Message display -->
+          <div v-if="message" class="alert" :class="`alert-${messageType}`" @click="clearNotification">
+            {{ message }}
+            <span class="alert-close">×</span>
+          </div>
+
+          <!-- Search bar -->
+          <div class="search-section">
+            <div class="search-wrapper">
+              <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <circle cx="11" cy="11" r="8"/>
+                <path d="M21 21l-4.35-4.35"/>
+              </svg>
+              <input
+                v-model="searchQuery"
+                type="text"
+                placeholder="Search for a student..."
+                class="search-input"
+                :disabled="!userHasLunch"
+              />
+            </div>
+          </div>
+
+          <!-- Students list -->
+          <div v-if="userHasLunch" class="students-section">
+            <div v-if="isLoading" class="loading-state">
+              <div class="spinner"></div>
+              <p>Loading students...</p>
+            </div>
+
+            <div v-else-if="filteredStudents.length === 0" class="no-results">
+              <div class="no-results-icon">👥</div>
+              <h3>No students found</h3>
+              <p v-if="searchQuery">Try a different search term</p>
+              <p v-else>No students available at the moment</p>
+            </div>
+
+            <div v-else class="student-list">
+              <h3 class="list-title">Available Students ({{ filteredStudents.length }})</h3>
+              <div class="student-grid">
+                <div
+                  v-for="student in filteredStudents"
+                  :key="student.id"
+                  class="student-card"
+                  :class="{ selected: selectedStudent && selectedStudent.id === student.id }"
+                  @click="selectedStudent = student"
+                >
+                  <div class="student-avatar">
+                    {{ student.full_name.charAt(0).toUpperCase() }}
+                  </div>
+                  <div class="student-info">
+                    <h4 class="student-name">{{ student.full_name }}</h4>
+                    <p class="student-status">Available</p>
+                  </div>
+                  <div v-if="selectedStudent && selectedStudent.id === student.id" class="selected-indicator">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <polyline points="20,6 9,17 4,12"/>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- No lunch state -->
+          <div v-else class="no-lunch-state">
+            <div class="no-lunch-icon">🍽️</div>
+            <h3>No Lunch to Gift</h3>
+            <p>You don't have any lunch ordered for today that you can gift to others.</p>
+            <button @click="goBack" class="btn btn-secondary">
+              Return to Dashboard
+            </button>
+          </div>
+        </div>
+
+        <!-- Gift button -->
+        <div v-if="userHasLunch" class="gift-lunch-footer">
+          <button
+            @click="giftLunch"
+            :disabled="!selectedStudent || isLoading"
+            class="btn btn-primary gift-btn"
+          >
+            <svg v-if="isLoading" class="btn-icon spinner" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10"/>
+            </svg>
+            <svg v-else class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-6"/>
+              <path d="M12 2v10m0 0l3-3m-3 3l-3-3"/>
+            </svg>
+            {{ isLoading ? 'Gifting...' : 'Gift Lunch' }}
+          </button>
+          <p class="gift-disclaimer">
+            This will transfer your lunch to the selected student
+          </p>
         </div>
       </div>
     </div>
@@ -214,245 +219,309 @@ function clearMessage() {
 .gift-lunch-main {
   flex: 1;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
   align-items: center;
-  padding: 40px 12px 24px 12px;
+  justify-content: center;
+  padding: var(--space-lg);
+  min-height: calc(100vh - 160px);
+}
+
+.gift-lunch-container {
+  width: 100%;
+  max-width: 700px;
+  position: relative;
 }
 
 .gift-lunch-card {
-  background: #fff;
-  border-radius: 24px;
-  box-shadow: 0 4px 24px rgba(239,68,68,0.08), 0 1.5px 8px rgba(0,0,0,0.04);
-  padding: 40px 32px;
-  max-width: 500px;
-  width: 100%;
-  margin-bottom: 32px;
-  position: relative;
-  z-index: 1;
-  transition: box-shadow 0.2s;
+  background: rgba(255,255,255,0.85); /* semi-transparent for light theme */
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+  transition: all var(--transition-normal);
+}
+[data-theme="dark"] .gift-lunch-card {
+  background: rgba(32,32,32,0.85); /* semi-transparent for dark theme */
 }
 
-.gift-lunch-card:hover {
-  box-shadow: 0 8px 32px rgba(239,68,68,0.13), 0 2px 12px rgba(0,0,0,0.07);
+.gift-lunch-header {
+  padding: var(--space-2xl);
+  background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
+  border-bottom: 1px solid var(--border-primary);
+  text-align: center;
 }
 
-.gift-lunch-back-btn {
-  background: none;
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  background: transparent;
   border: none;
-  color: #6b7280;
-  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
   cursor: pointer;
-  margin-bottom: 20px;
-  padding: 8px 0;
-  transition: color 0.2s;
+  padding: var(--space-sm) 0;
+  margin-bottom: var(--space-lg);
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
 }
 
-.gift-lunch-back-btn:hover {
-  color: #ef4444;
+.back-btn:hover {
+  color: var(--brand-primary);
+}
+
+.back-icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
 }
 
 .gift-lunch-title {
-  font-size: 2.2rem;
-  font-weight: 700;
-  color: #ef4444;
-  margin-bottom: 8px;
-  text-align: center;
-  letter-spacing: -0.5px;
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  margin-bottom: var(--space-sm);
+  letter-spacing: -0.02em;
 }
 
 .gift-lunch-subtitle {
-  color: #6b7280;
-  font-size: 1.1rem;
-  text-align: center;
-  margin-bottom: 24px;
+  font-size: var(--font-size-lg);
+  color: var(--text-secondary);
+  margin: 0;
 }
 
-.gift-lunch-message {
-  padding: 12px 16px;
-  border-radius: 12px;
-  margin-bottom: 20px;
-  cursor: pointer;
+.gift-lunch-content {
+  padding: var(--space-2xl);
+}
+
+.search-section {
+  margin-bottom: var(--space-2xl);
+}
+
+.search-wrapper {
   position: relative;
-  font-weight: 500;
 }
 
-.gift-lunch-message.success {
-  background: linear-gradient(90deg, #dcfce7 60%, #bbf7d0 100%);
-  color: #15803d;
-}
-
-.gift-lunch-message.error {
-  background: linear-gradient(90deg, #fee2e2 60%, #fecaca 100%);
-  color: #b91c1c;
-}
-
-.message-close {
+.search-icon {
   position: absolute;
-  right: 12px;
+  left: var(--space-md);
   top: 50%;
   transform: translateY(-50%);
-  font-size: 1.2rem;
-  opacity: 0.7;
+  width: 20px;
+  height: 20px;
+  color: var(--text-tertiary);
+  stroke-width: 2;
 }
 
-.gift-lunch-search {
-  margin-bottom: 24px;
-}
-
-.gift-lunch-search-input {
+.search-input {
   width: 100%;
-  padding: 12px 16px;
-  border: 2px solid #e5e7eb;
-  border-radius: 12px;
-  font-size: 1rem;
-  transition: border-color 0.2s;
+  padding: var(--space-md) var(--space-md) var(--space-md) var(--space-3xl);
+  font-size: var(--font-size-base);
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  transition: all var(--transition-fast);
   box-sizing: border-box;
 }
 
-.gift-lunch-search-input:focus {
+.search-input:focus {
   outline: none;
-  border-color: #ef4444;
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
 }
 
-.gift-lunch-search-input:disabled {
-  background: #f3f4f6;
-  color: #9ca3af;
+.search-input:disabled {
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  cursor: not-allowed;
 }
 
-.gift-lunch-students {
-  margin-bottom: 24px;
+.students-section {
+  margin-bottom: var(--space-xl);
 }
 
-.gift-lunch-loading, .gift-lunch-no-results {
+.loading-state {
   text-align: center;
-  color: #6b7280;
-  padding: 20px;
-  font-style: italic;
+  padding: var(--space-3xl);
+  color: var(--text-secondary);
 }
 
-.gift-lunch-student-list {
-  max-height: 300px;
+.loading-state .spinner {
+  margin: 0 auto var(--space-md);
+}
+
+.no-results {
+  text-align: center;
+  padding: var(--space-3xl);
+}
+
+.no-results-icon {
+  font-size: 4rem;
+  margin-bottom: var(--space-lg);
+}
+
+.no-results h3 {
+  color: var(--text-primary);
+  margin-bottom: var(--space-sm);
+}
+
+.no-results p {
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.list-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin-bottom: var(--space-lg);
+}
+
+.student-grid {
+  display: grid;
+  gap: var(--space-md);
+  max-height: 400px;
   overflow-y: auto;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
 }
 
-.gift-lunch-student-item {
-  padding: 12px 16px;
-  border-bottom: 1px solid #f3f4f6;
-  cursor: pointer;
-  transition: background-color 0.2s;
+.student-card {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
 }
 
-.gift-lunch-student-item:last-child {
-  border-bottom: none;
+.student-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--brand-primary);
+  box-shadow: var(--shadow-md);
 }
 
-.gift-lunch-student-item:hover {
-  background: #f9fafb;
+.student-card.selected {
+  border-color: var(--brand-primary);
+  background-color: #42b883;
 }
 
-.gift-lunch-student-item.selected {
-  background: linear-gradient(90deg, #dbeafe 60%, #bfdbfe 100%);
-  color: #1d4ed8;
+.student-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-full);
+  background: var(--brand-primary);
+  color: var(--text-inverse);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-lg);
+}
+
+.student-info {
+  flex: 1;
 }
 
 .student-name {
-  font-weight: 500;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0 0 var(--space-xs) 0;
+}
+
+.student-status {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: 0;
 }
 
 .selected-indicator {
-  color: #10b981;
-  font-weight: bold;
-  font-size: 1.1rem;
+  width: 24px;
+  height: 24px;
+  color: var(--brand-primary);
 }
 
-.gift-lunch-actions {
+.selected-indicator svg {
+  width: 100%;
+  height: 100%;
+  stroke-width: 3;
+}
+
+.no-lunch-state {
+  text-align: center;
+  padding: var(--space-3xl);
+}
+
+.no-lunch-icon {
+  font-size: 4rem;
+  margin-bottom: var(--space-lg);
+  filter: grayscale(1);
+}
+
+.no-lunch-state h3 {
+  color: var(--text-primary);
+  margin-bottom: var(--space-sm);
+}
+
+.no-lunch-state p {
+  color: var(--text-secondary);
+  margin-bottom: var(--space-xl);
+}
+
+.gift-lunch-footer {
+  padding: var(--space-xl) var(--space-2xl);
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-primary);
   text-align: center;
 }
 
-.gift-lunch-btn {
-  display: inline-block;
-  padding: 13px 28px;
-  border-radius: 14px;
-  font-weight: 600;
-  font-size: 1rem;
-  text-decoration: none;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-  border: none;
-  cursor: pointer;
-  transition: all 0.18s;
-  outline: none;
-  min-width: 140px;
+.gift-btn {
+  width: 100%;
+  max-width: 300px;
+  margin-bottom: var(--space-md);
 }
 
-.gift-lunch-btn-primary {
-  background: linear-gradient(90deg, #ef4444 70%, #b91c1c 100%);
-  background-size: 300% 100%;
-  background-position: 50% 100%;
-  transition: background-position 0.4s, transform 0.18s;
-  color: #fff;
+.btn-icon {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2;
 }
 
-.gift-lunch-btn-primary:hover:not(:disabled) {
-  background-position: 100% 20%;
-  transform: translateY(-2px) scale(1.04);
-}
-
-.gift-lunch-btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.gift-lunch-btn-secondary {
-  background: linear-gradient(90deg, #6b7280 70%, #4b5563 100%);
-  background-size: 300% 100%;
-  background-position: 50% 100%;
-  transition: background-position 0.4s, transform 0.18s;
-  color: #fff;
-}
-
-.gift-lunch-btn-secondary:hover {
-  background-position: 100% 20%;
-  transform: translateY(-2px) scale(1.04);
-}
-
-.gift-lunch-no-lunch {
-  text-align: center;
-  color: #6b7280;
-}
-
-.gift-lunch-no-lunch p {
-  margin-bottom: 20px;
-  font-size: 1.1rem;
+.gift-disclaimer {
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  margin: 0;
 }
 
 /* Responsive */
 @media (max-width: 640px) {
-  .gift-lunch-card {
-    padding: 24px 20px;
-    border-radius: 16px;
+  .gift-lunch-main {
+    padding: var(--space-md);
+  }
+
+  .gift-lunch-header,
+  .gift-lunch-content,
+  .gift-lunch-footer {
+    padding: var(--space-lg);
   }
 
   .gift-lunch-title {
-    font-size: 1.8rem;
+    font-size: var(--font-size-2xl);
   }
 
-  .gift-lunch-subtitle {
-    font-size: 1rem;
+  .student-card {
+    padding: var(--space-md);
   }
 
-  .gift-lunch-student-list {
-    max-height: 250px;
-  }
-
-  .gift-lunch-btn {
-    width: 100%;
+  .student-avatar {
+    width: 40px;
+    height: 40px;
+    font-size: var(--font-size-base);
   }
 }
 </style>

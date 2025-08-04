@@ -1,180 +1,49 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { useAuth } from '../composables/useAuth.js';
+import { useNotifications } from '../composables/useNotifications.js';
+import { googleAuth } from '../utils/googleAuth.js';
 
 const router = useRouter();
-const loginError = ref('');
-const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+const { isAuthenticated, setAuth, checkAuth } = useAuth();
+const { showError, clearNotification, message, messageType } = useNotifications();
 
-onMounted(() => {
+onMounted(async () => {
   // Check if user is already authenticated
-  const isAuthenticated = localStorage.getItem('is_authenticated');
-  if (isAuthenticated) {
-    checkAuthentication();
+  if (isAuthenticated.value) {
+    const authValid = await checkAuth();
+    if (authValid) {
+      router.push('/dashboard');
+      return;
+    }
   }
 
-  // Load Google Sign-In API script
-  loadGoogleScript();
+  // Load Google authentication script
+  try {
+    await googleAuth.loadScript();
+  } catch (error) {
+    showError('Failed to load authentication services');
+  }
 });
 
-function logAuth(message, data = null) {
-  const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] AUTH: ${message}`);
-  if (data) {
-    console.log('→ Data:', data);
-  }
-}
-
-// Update loadGoogleScript function to include logging
-function loadGoogleScript() {
-  logAuth('Loading Google authentication script');
-
-  if (document.getElementById('google-signin-script')) {
-    logAuth('Google script already loaded, skipping');
-    return;
-  }
-
-  const script = document.createElement('script');
-  script.id = 'google-signin-script';
-  script.src = 'https://accounts.google.com/gsi/client';
-  script.async = true;
-  script.defer = true;
-  script.onload = () => {
-    logAuth('Google authentication script loaded successfully');
-  };
-  script.onerror = (error) => {
-    logAuth('Failed to load Google authentication script', error);
-    loginError.value = 'Failed to load authentication services';
-  };
-  document.head.appendChild(script);
-}
-
-function signInWithGoogle() {
-  logAuth('Google Sign-In button clicked');
-
-  if (!window.google || !window.google.accounts) {
-    logAuth('Google API not available yet');
-    loginError.value = 'Google Sign-In is not available right now. Please try again.';
-    return;
-  }
-
-  logAuth('Initializing Google OAuth token client');
-  // Use the less problematic auth flow
-  const client = window.google.accounts.oauth2.initTokenClient({
-    client_id: googleClientId,
-    scope: 'email profile',
-    callback: handleOAuthResponse
-  });
-
-  // Request an access token
-  logAuth('Requesting OAuth token from Google');
-  client.requestAccessToken();
-}
-
-// Update handleOAuthResponse function to include logging
-async function handleOAuthResponse(tokenResponse) {
-  if (tokenResponse.error) {
-    logAuth('OAuth error received', tokenResponse.error);
-    loginError.value = 'Authentication failed. Please try again.';
-    return;
-  }
-
-  logAuth('OAuth token received successfully');
-
+async function signInWithGoogle() {
   try {
-    // Exchange the token for user info
-    logAuth('Fetching user profile from Google');
-    const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: {
-        'Authorization': `Bearer ${tokenResponse.access_token}`
-      }
+    clearNotification();
+
+    const { userInfo } = await googleAuth.signIn();
+
+    // Set authentication data
+    setAuth({
+      name: userInfo.name,
+      email: userInfo.email,
+      picture: userInfo.picture
     });
-
-    if (!userInfoResponse.ok) {
-      const error = await userInfoResponse.text();
-      logAuth('Failed to get user info from Google', { status: userInfoResponse.status, error });
-      throw new Error('Failed to get user info');
-    }
-
-    const userInfo = await userInfoResponse.json();
-    logAuth('User profile retrieved from Google', {
-      given_name: userInfo.given_name,
-      family_name: userInfo.family_name,
-      picture: userInfo.picture,
-      sub: userInfo.sub
-    });
-
-    // Send user info to your backend
-    logAuth('Sending authentication data to backend');
-    const verificationResponse = await fetch(`/api/verify-token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        fullName: userInfo.name,
-        sub: userInfo.sub,
-        picture: userInfo.picture
-      }),
-      credentials: 'include' // Important: This tells fetch to include cookies in the request
-    });
-
-    // Check if response is ok before proceeding
-    if (!verificationResponse.ok) {
-      const errorText = await verificationResponse.text();
-      logAuth('Backend token verification failed', {
-        status: verificationResponse.status,
-        statusText: verificationResponse.statusText,
-        error: errorText
-      });
-      throw new Error(`Token verification failed: ${verificationResponse.status} ${verificationResponse.statusText}`);
-    }
-
-    const authData = await verificationResponse.json();
-    logAuth('Authentication successful with backend', { message: authData.message });
-
-    // With cookie-based auth, we don't need to store the token
-    // Just store the user's name for the UI and a flag that we're authenticated
-    localStorage.setItem('is_authenticated', 'true');
-    localStorage.setItem('user_name', userInfo.name);
-    localStorage.setItem('picture', userInfo.picture);
-    logAuth('Authentication data stored in localStorage');
 
     // Redirect to dashboard
-    logAuth('Redirecting to dashboard');
     await router.push('/dashboard');
   } catch (error) {
-    logAuth('Authentication error', { message: error.message, stack: error.stack });
-    loginError.value = `Authentication failed: ${error.message}`;
-  }
-}
-
-// Update checkAuthentication function to include logging
-async function checkAuthentication() {
-  logAuth('Checking existing authentication');
-
-  try {
-    // With cookie authentication, we don't need to pass the token in headers
-    logAuth('Validating authentication with backend');
-    const response = await fetch(`/api/user-info`, {
-      credentials: 'include' // Include cookies in the request
-    });
-
-    if (response.ok) {
-      logAuth('Authentication verified successfully');
-      // Authentication is valid, redirect to dashboard
-      router.push('/dashboard');
-    } else {
-      logAuth('Authentication invalid or expired', { status: response.status });
-      // Authentication failed, remove auth flag
-      localStorage.removeItem('is_authenticated');
-      localStorage.removeItem('user_name');
-      logAuth('Cleared authentication data from localStorage');
-    }
-  } catch (error) {
-    logAuth('Authentication check error', { message: error.message });
-    localStorage.removeItem('is_authenticated');
-    localStorage.removeItem('user_name');
+    showError(`Authentication failed: ${error.message}`);
   }
 }
 </script>
@@ -182,133 +51,272 @@ async function checkAuthentication() {
 <template>
   <div class="login-page">
     <div class="login-container">
-      <div class="login-content">
-        <img src="../assets/images/logo-no-background.png" alt="Logo" class="logo" />
-        <h1 class="welcome-heading">Welcome to Luncheroo</h1>
-        <p class="welcome-text">Your lunch management solution</p>
+      <div class="login-card fade-in">
+        <div class="login-header">
+          <h1 class="login-title">
+            <img src="../assets/images/logo-no-background.png" alt="Luncheroo" class="login-logo" />
+          </h1>
+          <p class="login-subtitle">Your intelligent lunch management solution</p>
+          <div class="login-description">
+            <p>Sign in to manage your lunch orders, gift meals to friends, and explore the public lunch pool.</p>
+          </div>
+        </div>
 
-        <!-- Custom Google Sign-In button instead of the auto-rendered one -->
-        <button class="google-signin-button" @click="signInWithGoogle">
-          <img src="../assets/images/branding_guideline_sample_nt_rd_lg.svg" alt="Sign in with Google" />
-        </button>
+        <div class="login-content">
 
-        <p v-if="loginError" class="login-error">{{ loginError }}</p>
+          <button class="custom-google-btn" @click="signInWithGoogle">
+            <svg class="google-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+            </svg>
+            Continue with Google
+          </button>
+
+          <div v-if="message" class="alert" :class="`alert-${messageType}`" @click="clearNotification">
+            {{ message }}
+            <span class="alert-close">×</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
-
-
 <style scoped>
 .login-page {
+  min-height: 100vh;
   display: flex;
-  flex-direction: column;
-  height: 70vh;
-  width: 100%;
-  overflow-x: hidden;
-  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-lg);
+  background: transparent; /* Use global animated background */
+  position: relative;
 }
 
 .login-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
   width: 100%;
-  box-sizing: border-box;
-  padding: 2rem 0;
-  overflow-x: hidden;
+  max-width: 480px;
+  position: relative;
+  z-index: 1;
 }
 
-.login-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  max-width: 440px;
+.login-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+  transition: all var(--transition-normal);
+}
+
+.login-card:hover {
+  box-shadow: var(--shadow-brand);
+}
+
+.login-header {
+  padding: var(--space-2xl);
   text-align: center;
-  width: calc(100% - 2rem);
-  margin: 0 auto;
-  padding: 2.5rem;
-  background-color: var(--color-background);
-  border-radius: var(--radius-medium);
-  box-shadow: 0 4px 24px rgba(239,68,68,0.08), 0 1.5px 8px rgba(0,0,0,0.04);
-  box-sizing: border-box;
-  transition: box-shadow 0.2s;
+  background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
+  border-bottom: 1px solid var(--border-primary);
 }
 
-.login-content:hover{
-  box-shadow: 0 8px 32px rgba(239,68,68,0.13), 0 2px 12px rgba(0,0,0,0.07);
+.login-logo {
+  width: 200px;
+  height: auto;
+  max-width: 80vw;
+  filter: drop-shadow(0 4px 12px rgba(239, 68, 68, 0.2));
+  transition: transform var(--transition-fast);
 }
 
-.logo {
-  width: 180px;
-  margin-bottom: 30px;
-}
-
-.welcome-heading {
-  font-size: 28px;
-  font-weight: 600;
-  color: var(--color-heading);
-  margin-bottom: 8px;
-  letter-spacing: -0.5px;
-}
-
-.welcome-text {
-  font-size: 18px;
-  color: var(--color-text-light);
-  margin-bottom: 40px;
-  font-weight: 300;
-}
-
-.google-signin-button {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  transition: transform 0.2s ease;
-  margin-bottom: 1.5rem;
-}
-
-.google-signin-button:hover {
+.login-logo:hover {
   transform: scale(1.05);
 }
 
-.google-signin-button:active {
-  transform: scale(0.98);
+.login-title {
+  margin-bottom: var(--space-lg);
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
-.google-signin-button img {
-  width: 220px;
+.login-subtitle {
+  font-size: var(--font-size-lg);
+  color: var(--text-secondary);
+  margin: 0;
+  font-weight: var(--font-weight-normal);
 }
 
-.login-error {
-  margin-top: 20px;
-  color: var(--color-error);
-  font-size: 14px;
-  padding: 10px 15px;
-  background-color: rgba(255, 59, 48, 0.1);
-  border-radius: var(--radius-small);
+.login-content {
+  padding: var(--space-2xl);
+  text-align: center;
+}
+
+.login-description {
+  display: flex;
+  margin-top: var(--space-2xl);
+}
+
+.login-description p {
+  font-size: var(--font-size-base);
+  color: var(--text-secondary);
+  line-height: var(--line-height-relaxed);
+  margin: 0;
+}
+
+.custom-google-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
   width: 100%;
+  padding: var(--space-lg) var(--space-xl);
+  background: var(--bg-card);
+  border: 2px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  margin-bottom: var(--space-lg);
+  position: relative;
+  overflow: hidden;
 }
 
-@media (max-width: 640px) {
+.custom-google-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(66, 133, 244, 0.1), transparent);
+  transition: left var(--transition-slow);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.custom-google-btn:hover::before {
+  left: 100%;
+}
+
+.custom-google-btn:hover {
+  border-color: #4285F4;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.custom-google-btn:active {
+  transform: translateY(0);
+}
+
+.google-icon {
+  width: 20px;
+  height: 20px;
+  z-index: 2;
+  position: relative;
+}
+
+.alert {
+  padding: var(--space-md) var(--space-lg);
+  border-radius: var(--radius-lg);
+  border: 1px solid;
+  font-weight: var(--font-weight-medium);
+  position: relative;
+  cursor: pointer;
+  margin-top: var(--space-lg);
+  transition: all var(--transition-fast);
+}
+
+.alert:hover {
+  transform: translateX(4px);
+}
+
+.alert-close {
+  position: absolute;
+  right: var(--space-md);
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: var(--font-size-lg);
+  opacity: 0.7;
+  transition: opacity var(--transition-fast);
+}
+
+.alert:hover .alert-close {
+  opacity: 1;
+}
+
+/* Mobile and Tablet Responsive */
+@media (max-width: 768px) {
+  .login-page {
+    padding: var(--space-md);
+    align-items: flex-start;
+    padding-top: var(--space-2xl);
+  }
+
+  .login-header {
+    padding: var(--space-xl) var(--space-lg);
+  }
+
   .login-content {
-    padding: 1.5rem;
+    padding: var(--space-xl) var(--space-lg);
   }
 
-  .logo {
-    width: 150px;
+  .login-logo {
+    width: 160px;
+    max-width: 70vw;
   }
 
-  .welcome-heading {
-    font-size: 24px;
+  .login-title {
+    font-size: var(--font-size-2xl);
   }
 
-  .welcome-text {
-    font-size: 16px;
+  .login-subtitle {
+    font-size: var(--font-size-base);
+  }
+
+  .custom-google-btn {
+    padding: var(--space-md) var(--space-lg);
+    font-size: var(--font-size-sm);
+  }
+
+  .google-icon {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-container {
+    max-width: 100%;
+  }
+
+  .login-card {
+    border-radius: var(--radius-xl);
+  }
+
+  .login-header {
+    padding: var(--space-lg);
+  }
+
+  .login-content {
+    padding: var(--space-lg);
+  }
+
+  .login-title {
+    font-size: var(--font-size-xl);
+  }
+
+  .login-subtitle {
+    font-size: var(--font-size-sm);
+  }
+
+  .login-logo {
+    width: 140px;
+    max-width: 75vw;
   }
 }
 </style>

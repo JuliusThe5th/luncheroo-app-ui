@@ -1,8 +1,16 @@
 <template>
   <footer class="app-footer">
     <div class="footer-container">
-      <div class="footer-copyright">
-        <p>© {{ currentYear }} Luncheroo. In cooperation with ITG.</p>
+      <div class="footer-content">
+        <div class="footer-info">
+          <p class="footer-copyright">© {{ currentYear }} Luncheroo. In cooperation with ITG.</p>
+          <p class="footer-subtitle">Making lunch management simple and delicious</p>
+        </div>
+        <div class="footer-decoration">
+          <div class="footer-logo">
+            <img src="../assets/images/logo-no-background.png" alt="Luncheroo" class="footer-logo-img" />
+          </div>
+        </div>
       </div>
     </div>
   </footer>
@@ -16,33 +24,124 @@ const currentYear = computed(() => new Date().getFullYear());
 
 <style scoped>
 .app-footer {
-  padding: 20px 0;
-  background: rgb(174, 174, 174);
-  border-top: 1px solid var(--color-border);
-  font-size: 13px;
-  color: white;
+  background: rgba(255, 255, 255, 0.85); /* semi-transparent for light theme */
+  border-top: 1px solid var(--border-primary);
   margin-top: auto;
-  border-radius: 24px 24px 0 0;
-  box-shadow: 0 0 24px 0 rgba(239,68,68,0.13), 0 0 8px 0 rgba(0,0,0,0.07);}
+  backdrop-filter: blur(20px);
+  position: relative;
+  overflow: hidden;
+  width: 100vw;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+[data-theme='dark'] .app-footer {
+  background: rgba(32, 32, 32, 0.85); /* semi-transparent for dark theme */
+}
+
+.app-footer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--brand-primary), transparent);
+  opacity: 0.3;
+}
 
 .footer-container {
-  max-width: 980px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 0 22px;
+  padding: 0 var(--space-lg);
+  width: 100%;
+}
+
+.footer-content {
   display: flex;
-  flex-direction: column;
   align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2xl) 0;
+  min-height: 80px;
+  flex-wrap: wrap;
+}
+
+.footer-info {
+  flex: 1;
 }
 
 .footer-copyright {
-  font-size: 20px;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  margin-bottom: var(--space-xs);
+  letter-spacing: -0.01em;
 }
 
-@media (max-width: 640px) {
+.footer-subtitle {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: 0;
+  font-style: italic;
+}
+
+.footer-decoration {
+  display: flex;
+  align-items: center;
+  opacity: 0.6;
+}
+
+.footer-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.footer-logo-img {
+  height: 48px;
+  width: auto;
+  max-width: 30vw;
+  filter: grayscale(1) opacity(0.4);
+  transition: all var(--transition-normal);
+}
+
+.footer-logo:hover .footer-logo-img {
+  filter: grayscale(0) opacity(0.8);
+  transform: scale(1.1);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .footer-container {
+    padding: 0 var(--space-md);
+  }
+
+  .footer-content {
+    flex-direction: column;
+    text-align: center;
+    gap: var(--space-md);
+    padding: var(--space-xl) 0;
+  }
+
   .footer-copyright {
-    border-radius: 12px 12px 0 0;
-    padding: 12px 0;
-    font-size: 0.85rem;
+    font-size: var(--font-size-sm);
+  }
+
+  .footer-subtitle {
+    font-size: var(--font-size-xs);
+  }
+
+  .footer-logo-img {
+    height: 64px;
+    max-width: 60vw;
+  }
+}
+
+@media (max-width: 480px) {
+  .footer-logo-img {
+    height: 48px;
+    max-width: 80vw;
   }
 }
 </style>

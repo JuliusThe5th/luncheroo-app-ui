@@ -1,16 +1,13 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import { useAuth } from '../composables/useAuth.js';
+import { api } from '../utils/api.js';
 
 const router = useRouter();
-const userName = ref(localStorage.getItem('user_name') || 'User');
+const { user, requireAuth, logout } = useAuth();
 const hasLunchToday = ref(false);
 const lunchNumber = ref(localStorage.getItem('lunchNumber') || 0);
-
-const profilePictureUrl = ref('');
-onMounted(() => {
-  profilePictureUrl.value = localStorage.getItem('picture') || '/assets/images/default-profile.png';
-});
 
 const currentDate = computed(() => {
   const today = new Date();
@@ -23,367 +20,546 @@ const currentDate = computed(() => {
 });
 
 onMounted(async () => {
+  // Check authentication
+  if (!requireAuth()) return;
+
   try {
-    console.log('Dashboard mounted, checking authentication...');
+    // Debug: Check what cookies we have
+    console.log('Current cookies:', document.cookie);
+    console.log('Making request to:', `${import.meta.env.VITE_API_URL}/api/user-info`);
 
-    // Since we're using cookie-based auth, we don't need to get a token from localStorage
-    // Just check if we have an auth flag set
-    const isAuthenticated = localStorage.getItem('is_authenticated');
+    // Get user info and lunch data
+    console.log('Fetching user info...');
+    const userData = await api.getUserInfo();
+    console.log('User data received:', userData);
 
-    console.log('Is authenticated flag exists:', !!isAuthenticated);
-
-    if (!isAuthenticated) {
-      console.log('Not authenticated, redirecting to login');
-      router.push('/');
-      return;
+    // Update user name if available
+    if (userData?.name) {
+      user.value.name = userData.name;
     }
 
-    // We already have the user's name from the login process
-    userName.value = localStorage.getItem('user_name') || 'User';
-
-    try {
-      // Get user info with cookie authentication
-      console.log('Fetching user info...');
-
-      const userResponse = await fetch(`/api/user-info`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        credentials: 'include' // Important: Include cookies in the request
-      });
-
-      console.log('User info response status:', userResponse.status);
-
-      // Handle authentication failures
-      if (userResponse.status === 401 || userResponse.status === 403) {
-        console.error('Authentication failed. Cookie may be invalid or expired.');
-
-        // Try to get error details
-        const errorText = await userResponse.text();
-        console.error('Error response:', errorText);
-
-        return;
-      }
-
-      if (userResponse.ok) {
-        try {
-          const userData = await userResponse.json();
-          console.log('User data received:', userData);
-
-          // Update user name if available
-          if (userData && userData.name) {
-            userName.value = userData.name;
-          }
-
-          // Extract lunch information from user data
-          if (userData.lunch) {
-            if (userData.lunch.hasLunch) {
-              hasLunchToday.value = true;
-              lunchNumber.value = userData.lunch.number;
-              localStorage.setItem('lunchNumber', lunchNumber.value);
-            } else {
-              hasLunchToday.value = false;
-              localStorage.removeItem('lunchNumber');
-            }
-            console.log('Lunch data:', userData.lunch);
-          } else {
-            console.log('No lunch data in response');
-            hasLunchToday.value = false;
-          }
-
-        } catch (parseError) {
-          console.error('Error parsing user info response:', parseError);
-          // Continue showing the dashboard with the name from localStorage
-        }
+    // Extract lunch information
+    if (userData.lunch) {
+      console.log('Lunch data:', userData.lunch);
+      if (userData.lunch.hasLunch) {
+        hasLunchToday.value = true;
+        lunchNumber.value = userData.lunch.number;
+        localStorage.setItem('lunchNumber', lunchNumber.value);
+        console.log('Setting lunch number to:', userData.lunch.number);
       } else {
-        console.log('User info request failed, but continuing with dashboard');
-        // Don't redirect - just show dashboard with localStorage data
+        hasLunchToday.value = false;
+        localStorage.removeItem('lunchNumber');
+        console.log('No lunch found for today');
       }
-    } catch (apiError) {
-      console.error('API request error:', apiError);
-      // Don't redirect - show dashboard with localStorage data
+    } else {
+      hasLunchToday.value = false;
+      console.log('No lunch property in user data');
     }
   } catch (error) {
     console.error('Dashboard initialization error:', error);
-    // Only redirect if there's a fatal error
-    if (error.message === 'AUTHENTICATION_REQUIRED') {
-      localStorage.removeItem('is_authenticated');
-      localStorage.removeItem('user_name');
-      router.push('/');
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack
+    });
+
+    // Continue showing dashboard with localStorage data
+    const storedLunchNumber = localStorage.getItem('lunchNumber');
+    if (storedLunchNumber) {
+      hasLunchToday.value = true;
+      lunchNumber.value = storedLunchNumber;
+      console.log('Using stored lunch number:', storedLunchNumber);
     }
   }
 });
-
-function logout() {
-  // Call the backend to clear the authentication cookie
-  fetch('/api/logout', {
-    method: 'POST',
-    credentials: 'include' // Include cookies in the request
-  }).finally(() => {
-    // Clear local storage data
-    localStorage.removeItem('is_authenticated');
-    localStorage.removeItem('user_name');
-    localStorage.removeItem('lunchNumber');
-    localStorage.removeItem('picture');
-
-    // Redirect to login page
-    router.push('/');
-  });
-}
 </script>
 
 <template>
-    <main class="dashboard-main">
-      <div class="dashboard-card">
-        <div class="dashboard-title-row">
-          <img :src="profilePictureUrl" alt="Profile" class="dashboard-profile-pic" />
-          <div class="dashboard-title-col">
-            <div class="dashboard-welcome">Welcome</div>
-            <h2 class="dashboard-title">{{ userName }}!</h2>
+  <main class="dashboard-main">
+    <div class="dashboard-container">
+      <div class="dashboard-card fade-in">
+        <div class="dashboard-header">
+          <div class="user-profile">
+            <img :src="user.picture" alt="Profile" class="profile-avatar" />
+            <div class="user-info">
+              <h1 class="welcome-text">Welcome back!</h1>
+              <h2 class="user-name">{{ user.name }}</h2>
+              <p class="current-date">{{ currentDate }}</p>
+            </div>
           </div>
         </div>
-        <p class="dashboard-subtitle">Here's your lunch information for today.</p>
-        <p class="dashboard-date">{{ currentDate }}</p>
-        <div class="dashboard-lunch-info">
-          <div v-if="hasLunchToday" class="dashboard-lunch-success">
-            You have lunch ordered for today!
+
+        <div class="dashboard-content">
+          <div class="lunch-status-card">
+            <div class="status-header">
+              <h3>Today's Lunch Status</h3>
+              <div class="status-indicator" :class="{ 'has-lunch': hasLunchToday }">
+                <div class="indicator-dot"></div>
+                <span>{{ hasLunchToday ? 'Active' : 'No Order' }}</span>
+              </div>
+            </div>
+
+            <div class="lunch-info">
+              <div v-if="hasLunchToday" class="lunch-success">
+                <div class="lunch-icon">🍽️</div>
+                <div class="lunch-details">
+                  <h4>Lunch Confirmed</h4>
+                  <p>You have lunch ordered for today</p>
+                  <div class="lunch-number">
+                    <span class="order-badge">Order #{{ lunchNumber }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div v-else class="lunch-empty">
+                <div class="empty-icon">🍽️</div>
+                <div class="empty-details">
+                  <h4>No Lunch Today</h4>
+                  <p>You don't have any lunch ordered for today</p>
+                </div>
+              </div>
+            </div>
           </div>
-          <div v-if="hasLunchToday" class="dashboard-lunch-number">
-            Lunch #{{ lunchNumber }}
-          </div>
-          <div v-else class="dashboard-lunch-fail">
-            You don't have lunch ordered for today.
+
+          <div class="actions-section">
+            <h3 class="actions-title">Quick Actions</h3>
+            <div class="action-grid">
+              <router-link to="/gift-lunch" class="action-card">
+                <div class="action-icon gift">🎁</div>
+                <div class="action-content">
+                  <h4>Gift Your Lunch</h4>
+                  <p>Share your meal with a friend</p>
+                </div>
+                <div class="action-arrow">→</div>
+              </router-link>
+
+              <router-link to="/public-pool" class="action-card">
+                <div class="action-icon pool">🔄</div>
+                <div class="action-content">
+                  <h4>Public Lunch Pool</h4>
+                  <p>Explore available lunches</p>
+                </div>
+                <div class="action-arrow">→</div>
+              </router-link>
+            </div>
           </div>
         </div>
-        <div class="dashboard-actions">
-          <div class="dashboard-actions-row">
-            <a href="/gift-lunch" class="dashboard-btn dashboard-btn-blue">
-              Gift your Lunch
-            </a>
-            <a href="/public-pool" class="dashboard-btn dashboard-btn-green">
-              Public Lunch Pool
-            </a>
-          </div>
-          <button @click="logout" class="dashboard-btn dashboard-btn-red dashboard-btn-logout">
-            Logout
+
+        <div class="dashboard-footer">
+          <button @click="logout" class="logout-btn">
+            <svg class="logout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16,17 21,12 16,7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            Sign Out
           </button>
         </div>
       </div>
-    </main>
+    </div>
+  </main>
 </template>
 
 <style scoped>
-@keyframes gradientMove {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-}
-
-/* Main content */
 .dashboard-main {
   flex: 1;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
   align-items: center;
-  padding: 40px 12px 24px 12px;
-}
-
-/* Card */
-.dashboard-card {
-  background: #fff;
-  border-radius: 24px;
-  box-shadow: 0 4px 24px rgba(239,68,68,0.08), 0 1.5px 8px rgba(0,0,0,0.04);
-  padding: 40px 32px;
-  max-width: 440px;
-  width: 100%;
-  margin-bottom: 32px;
+  justify-content: center;
+  padding: var(--space-lg);
+  min-height: calc(100vh - 160px);
+  background: transparent;
   position: relative;
-  z-index: 1;
-  transition: box-shadow 0.2s;
 }
+
+.dashboard-container {
+  width: 100%;
+  max-width: 600px;
+  position: relative;
+}
+
+.dashboard-card {
+  background: rgba(255,255,255,0.85); /* semi-transparent for light theme */
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+  transition: all var(--transition-normal);
+}
+[data-theme="dark"] .dashboard-card {
+  background: rgba(32,32,32,0.85); /* semi-transparent for dark theme */
+}
+
 .dashboard-card:hover {
-  box-shadow: 0 8px 32px rgba(239,68,68,0.13), 0 2px 12px rgba(0,0,0,0.07);
+  box-shadow: var(--shadow-brand);
 }
 
-/* Titles */
-.dashboard-title {
-  font-size: 2.2rem;
-  font-weight: 700;
-  color: #ef4444;
-  margin-bottom: 8px;
-  text-align: center;
-  letter-spacing: -0.5px;
-}
-.dashboard-subtitle {
-  color: #6b7280;
-  font-size: 1.1rem;
-  text-align: center;
-  margin-bottom: 2px;
-}
-.dashboard-date {
-  color: #9ca3af;
-  text-align: center;
-  margin-bottom: 24px;
-  font-size: 0.95rem;
+.dashboard-header {
+  padding: var(--space-2xl);
+  background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
+  border-bottom: 1px solid var(--border-primary);
 }
 
-/* Lunch info */
-.dashboard-lunch-info {
-  margin-bottom: 32px;
-}
-.dashboard-lunch-success {
-  background: linear-gradient(90deg, #dcfce7 60%, #bbf7d0 100%);
-  color: #15803d;
-  text-align: center;
-  border-radius: 12px;
-  padding: 16px;
-  font-weight: 600;
-  margin-bottom: 10px;
-  box-shadow: 0 1px 4px rgba(34,197,94,0.07);
-}
-.dashboard-lunch-number {
-  font-size: 2.5rem;
-  font-weight: 700;
-  color: #ef4444;
-  text-align: center;
-  margin-bottom: 8px;
-  letter-spacing: 1px;
-}
-.dashboard-lunch-fail {
-  background: linear-gradient(90deg, #fee2e2 60%, #fecaca 100%);
-  color: #b91c1c;
-  text-align: center;
-  border-radius: 12px;
-  padding: 16px;
-  font-weight: 600;
-  margin-bottom: 10px;
-  box-shadow: 0 1px 4px rgba(239,68,68,0.07);
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
 }
 
-.dashboard-profile-pic {
-  width: 5rem;
-  height: 5rem;
-  border-radius: 50%;
+.profile-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-full);
+  border: 3px solid var(--border-primary);
   object-fit: cover;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  transition: all var(--transition-fast);
 }
 
-.dashboard-title-row {
+.profile-avatar:hover {
+  transform: scale(1.05);
+  border-color: var(--brand-primary);
+}
+
+.user-info {
+  flex: 1;
+}
+
+.welcome-text {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-xs) 0;
+}
+
+.user-name {
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--brand-primary);
+  margin: 0 0 var(--space-xs) 0;
+  letter-spacing: -0.02em;
+}
+
+.current-date {
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+.dashboard-content {
+  padding: var(--space-2xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xl);
+}
+
+.lunch-status-card {
+  background: rgba(248,247,242,0.85); /* semi-transparent for light theme */
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-xl);
+  padding: var(--space-xl);
+  transition: all var(--transition-fast);
+}
+[data-theme="dark"] .lunch-status-card {
+  background: rgba(36,36,36,0.85);
+}
+
+.status-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-lg);
+}
+
+.status-header h3 {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--error-bg);
+  color: var(--error-text);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  transition: all var(--transition-fast);
+}
+
+.status-indicator.has-lunch {
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: currentColor;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.lunch-info {
+  padding: var(--space-lg);
+  background: rgba(255,255,255,0.85);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-primary);
+}
+[data-theme="dark"] .lunch-info {
+  background: rgba(32,32,32,0.85);
+}
+
+.lunch-success,
+.lunch-empty {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.lunch-icon,
+.empty-icon {
+  font-size: 3rem;
+  width: 72px;
+  height: 72px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  margin-bottom: 8px;
-}
-.dashboard-title-col {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-.dashboard-welcome {
-  font-size: 2rem;
-  color: #ef4444;
-  margin-bottom: 2px;
-  font-weight: 700;
-}
-.dashboard-title {
-  font-size: 2.2rem;
-  font-weight: 700;
-  color: #ef4444;
-  margin-bottom: 8px;
-  text-align: left;
-  letter-spacing: -0.5px;
+  background: var(--success-bg);
+  border-radius: var(--radius-full);
+  border: 2px solid var(--success-border);
 }
 
-/* Actions */
-.dashboard-actions {
-  text-align: center;
-  margin-top: 12px;
+.empty-icon {
+  background: var(--error-bg);
+  border-color: var(--error-border);
+  filter: grayscale(1);
+}
+
+.lunch-details h4,
+.empty-details h4 {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0 0 var(--space-xs) 0;
+}
+
+.lunch-details p,
+.empty-details p {
+  font-size: var(--font-size-base);
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-md) 0;
+}
+
+.lunch-number {
   display: flex;
-  flex-direction: column;
   align-items: center;
+  gap: var(--space-sm);
 }
-.dashboard-actions-row {
+
+.order-badge {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--brand-primary);
+  background: var(--bg-card);
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--radius-md);
+}
+
+.actions-section {
+  margin-top: var(--space-lg);
+}
+
+.actions-title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0 0 var(--space-lg) 0;
+}
+
+.action-grid {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.action-card {
   display: flex;
-  gap: 12px;
-  justify-content: center;
-  margin-bottom: 16px;
-}
-.dashboard-btn {
-  display: inline-block;
-  margin: 8px 6px 0 0;
-  padding: 13px 28px;
-  border-radius: 14px;
-  font-weight: 600;
-  font-size: 1rem;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
   text-decoration: none;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-  border: none;
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+}
+
+.action-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, var(--bg-overlay), transparent);
+  transition: left var(--transition-slow);
+}
+
+.action-card:hover::before {
+  left: 100%;
+}
+
+.action-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--brand-primary);
+}
+
+.action-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-xl);
+  transition: all var(--transition-fast);
+}
+
+.action-icon.gift {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+}
+
+.action-icon.pool {
+  background: linear-gradient(135deg, var(--brand-accent), #2563eb);
+}
+
+.action-card:hover .action-icon {
+  transform: scale(1.1);
+}
+
+.action-content {
+  flex: 1;
+}
+
+.action-content h4 {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0 0 var(--space-xs) 0;
+}
+
+.action-content p {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.action-arrow {
+  font-size: var(--font-size-xl);
+  color: var(--text-tertiary);
+  transition: all var(--transition-fast);
+}
+
+.action-card:hover .action-arrow {
+  color: var(--brand-primary);
+  transform: translateX(4px);
+}
+
+.dashboard-footer {
+  padding: var(--space-xl) var(--space-2xl);
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-primary);
+  text-align: center;
+}
+
+.logout-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-lg);
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-secondary);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
-  transition: background 0.18s, transform 0.18s;
-  outline: none;
+  transition: all var(--transition-fast);
 }
-.dashboard-btn-blue {
-  background: linear-gradient(90deg, #3b82f6 70%, #2563eb 100%);
-  background-size: 300% 100%;
-  background-position: 50% 100%;
-  transition: background-position 0.4s, transform 0.18s;
-  color: #fff;
+
+.logout-btn:hover {
+  background: var(--error-bg);
+  color: var(--error-text);
+  border-color: var(--error-border);
+  transform: translateY(-1px);
 }
-.dashboard-btn-blue:hover {
-  background-position: 100% 20%;
-  transform: translateY(-2px) scale(1.04);
-}
-.dashboard-btn-green {
-  background: linear-gradient(90deg, #22c55e 70%, #16a34a 100%);
-  background-size: 300% 100%;
-  background-position: 50% 100%;
-  transition: background-position 0.4s, transform 0.18s;
-  color: #fff;
-}
-.dashboard-btn-green:hover {
-  background-position: 100% 20%;
-  transform: translateY(-2px) scale(1.04);
-}
-.dashboard-btn-red {
-  background: linear-gradient(90deg, #ef4444 70%, #b91c1c 100%);
-  background-size: 300% 100%;
-  background-position: 50% 100%;
-  transition: background-position 0.4s, transform 0.18s;
-  color: #fff;
-}
-.dashboard-btn-red:hover {
-  background-position: 100% 20%;
-  transform: translateY(-2px) scale(1.04);
-}
-.dashboard-btn-logout {
-  margin-top: 0;
-  width: 70%;
-  max-width: 220px;
+
+.logout-icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
 }
 
 /* Responsive */
 @media (max-width: 640px) {
-  .dashboard-card {
-    padding: 18px 8px;
-    border-radius: 16px;
+  .dashboard-main {
+    padding: var(--space-md);
   }
-  .dashboard-title {
-    font-size: 1.4rem;
+
+  .dashboard-header,
+  .dashboard-content,
+  .dashboard-footer {
+    padding: var(--space-lg);
   }
-  .dashboard-lunch-number {
-    font-size: 1.6rem;
-  }
-  .dashboard-actions-row {
+
+  .user-profile {
     flex-direction: column;
-    gap: 8px;
-    margin-bottom: 12px;
+    text-align: center;
+    gap: var(--space-md);
   }
-  .dashboard-btn-logout {
-    width: 100%;
-    max-width: none;
+
+  .profile-avatar {
+    width: 64px;
+    height: 64px;
+  }
+
+  .user-name {
+    font-size: var(--font-size-2xl);
+  }
+
+  .lunch-success,
+  .lunch-empty {
+    flex-direction: column;
+    text-align: center;
+    gap: var(--space-md);
+  }
+
+  .lunch-icon,
+  .empty-icon {
+    width: 64px;
+    height: 64px;
+    font-size: 2.5rem;
+  }
+
+  .action-card {
+    padding: var(--space-md);
+    gap: var(--space-md);
+  }
+
+  .action-icon {
+    width: 40px;
+    height: 40px;
+    font-size: var(--font-size-lg);
   }
 }
 </style>
