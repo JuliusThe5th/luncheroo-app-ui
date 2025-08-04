@@ -5,7 +5,7 @@ import { useRouter } from 'vue-router';
 const router = useRouter();
 const userName = ref(localStorage.getItem('user_name') || 'User');
 const hasLunchToday = ref(false);
-const lunchNumber = ref(0); // Changed from lunchCount to lunchNumber to reflect its true meaning
+const lunchNumber = ref(localStorage.getItem('lunchNumber') || 0);
 
 const profilePictureUrl = ref('');
 onMounted(() => {
@@ -64,8 +64,6 @@ onMounted(async () => {
         const errorText = await userResponse.text();
         console.error('Error response:', errorText);
 
-        // Create mock data for demo purposes
-        mockUserAndLunchData();
         return;
       }
 
@@ -83,9 +81,11 @@ onMounted(async () => {
           if (userData.lunch) {
             if (userData.lunch.hasLunch) {
               hasLunchToday.value = true;
-              lunchNumber.value = userData.lunch.number || 0;
+              lunchNumber.value = userData.lunch.number;
+              localStorage.setItem('lunchNumber', lunchNumber.value);
             } else {
               hasLunchToday.value = false;
+              localStorage.removeItem('lunchNumber');
             }
             console.log('Lunch data:', userData.lunch);
           } else {
@@ -125,23 +125,12 @@ function logout() {
     // Clear local storage data
     localStorage.removeItem('is_authenticated');
     localStorage.removeItem('user_name');
+    localStorage.removeItem('lunchNumber');
+    localStorage.removeItem('picture');
 
     // Redirect to login page
     router.push('/');
   });
-}
-
-function mockUserAndLunchData() {
-  console.log('Using mock data since API authentication failed');
-  // Display user's name from localStorage
-  userName.value = localStorage.getItem('user_name') || 'User';
-
-  // Randomly decide if user has lunch today
-  const hasLunch = Math.random() > 0.5;
-  hasLunchToday.value = hasLunch;
-  if (hasLunch) {
-    lunchNumber.value = Math.floor(Math.random() * 5) + 1; // Random number between 1-5
-  }
 }
 </script>
 

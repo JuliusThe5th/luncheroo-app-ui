@@ -112,7 +112,6 @@ async function handleOAuthResponse(tokenResponse) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        email: userInfo.email,
         fullName: userInfo.name,
         sub: userInfo.sub,
         picture: userInfo.picture
@@ -143,7 +142,7 @@ async function handleOAuthResponse(tokenResponse) {
 
     // Redirect to dashboard
     logAuth('Redirecting to dashboard');
-    router.push('/dashboard');
+    await router.push('/dashboard');
   } catch (error) {
     logAuth('Authentication error', { message: error.message, stack: error.stack });
     loginError.value = `Authentication failed: ${error.message}`;
