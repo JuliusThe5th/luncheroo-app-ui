@@ -185,7 +185,9 @@ function goBack() {
 
           <!-- No lunch state -->
           <div v-else class="no-lunch-state">
-            <div class="no-lunch-icon">🍽️</div>
+            <div class="no-lunch-icon">
+              <i class="bi bi-fork-knife lunch-icon"></i>
+            </div>
             <h3>No Lunch to Gift</h3>
             <p>You don't have any lunch ordered for today that you can gift to others.</p>
             <button @click="goBack" class="btn btn-secondary">

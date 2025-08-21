@@ -8,13 +8,8 @@
           class="theme-toggle"
           :aria-label="isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'"
         >
-          <svg v-if="!isDarkMode" class="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-          </svg>
-          <svg v-else class="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <circle cx="12" cy="12" r="5"/>
-            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-          </svg>
+          <i v-if="!isDarkMode" class="theme-icon bi bi-moon" stroke="currentColor"></i>
+          <i v-else class="theme-icon bi bi-sun" stroke="currentColor"></i>
         </button>
       </div>
     </div>
@@ -79,7 +74,6 @@
   justify-content: center;
   width: 44px;
   height: 44px;
-  border: none;
   border-radius: var(--radius-full);
   background: var(--bg-secondary);
   color: var(--text-secondary);
@@ -95,15 +89,17 @@
   transform: scale(1.1);
 }
 
-.theme-toggle:focus {
+.theme-toggle:active {
   outline: 2px solid var(--border-focus);
-  outline-offset: 2px;
 }
 
+
 .theme-icon {
-  width: 20px;
-  height: 20px;
-  stroke-width: 2;
+  display: block;
+  margin: auto;
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
   transition: all var(--transition-fast);
 }
 
@@ -128,9 +124,8 @@
     height: 40px;
   }
 
-  .theme-icon {
-    width: 18px;
-    height: 18px;
+  .bi-moon{
+    font-size: 2rem;
   }
 }
 </style>

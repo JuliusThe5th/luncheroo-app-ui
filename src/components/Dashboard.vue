@@ -100,7 +100,7 @@ onMounted(async () => {
 
             <div class="lunch-info">
               <div v-if="hasLunchToday" class="lunch-success">
-                <div class="lunch-icon">🍽️</div>
+                <i class="bi bi-fork-knife lunch-icon"></i>
                 <div class="lunch-details">
                   <h4>Lunch Confirmed</h4>
                   <p>You have lunch ordered for today</p>
@@ -111,7 +111,7 @@ onMounted(async () => {
               </div>
 
               <div v-else class="lunch-empty">
-                <div class="empty-icon">🍽️</div>
+                <i class="bi bi-fork-knife lunch-icon"></i>
                 <div class="empty-details">
                   <h4>No Lunch Today</h4>
                   <p>You don't have any lunch ordered for today</p>
@@ -124,7 +124,9 @@ onMounted(async () => {
             <h3 class="actions-title">Quick Actions</h3>
             <div class="action-grid">
               <router-link to="/gift-lunch" class="action-card">
-                <div class="action-icon gift">🎁</div>
+                <div class="action-icon gift">
+                  <i class="bi bi-gift-fill"></i>
+                </div>
                 <div class="action-content">
                   <h4>Gift Your Lunch</h4>
                   <p>Share your meal with a friend</p>
@@ -133,7 +135,9 @@ onMounted(async () => {
               </router-link>
 
               <router-link to="/public-pool" class="action-card">
-                <div class="action-icon pool">🔄</div>
+                <div class="action-icon pool">
+                  <i class="bi bi-arrow-left-right"></i>
+                </div>
                 <div class="action-content">
                   <h4>Public Lunch Pool</h4>
                   <p>Explore available lunches</p>
@@ -146,11 +150,7 @@ onMounted(async () => {
 
         <div class="dashboard-footer">
           <button @click="logout" class="logout-btn">
-            <svg class="logout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-              <polyline points="16,17 21,12 16,7"/>
-              <line x1="21" y1="12" x2="9" y2="12"/>
-            </svg>
+            <i class="bi bi-box-arrow-right"></i>
             Sign Out
           </button>
         </div>
@@ -324,23 +324,8 @@ onMounted(async () => {
   gap: var(--space-lg);
 }
 
-.lunch-icon,
-.empty-icon {
-  font-size: 3rem;
-  width: 72px;
-  height: 72px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--success-bg);
-  border-radius: var(--radius-full);
-  border: 2px solid var(--success-border);
-}
-
-.empty-icon {
-  background: var(--error-bg);
-  border-color: var(--error-border);
-  filter: grayscale(1);
+.lunch-icon {
+  font-size: 2.5rem;
 }
 
 .lunch-details h4,
@@ -441,6 +426,8 @@ onMounted(async () => {
 
 .action-icon.pool {
   background: linear-gradient(135deg, var(--brand-accent), #2563eb);
+  font-size: 1.5rem;
+  text-shadow: 0 0 2px #2563eb, 0 0 1px #2563eb;
 }
 
 .action-card:hover .action-icon {

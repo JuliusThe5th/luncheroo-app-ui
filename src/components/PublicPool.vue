@@ -141,7 +141,9 @@ function goBack() {
                 <p class="donate-hint">You can donate your lunch for today to the pool.</p>
               </div>
               <div v-else-if="pool[1] === 0 && pool[2] === 0 && pool[3] === 0" class="empty-state">
-                <div class="empty-icon">🔄</div>
+                <div class="empty-icon">
+                  <i class="bi bi-arrow-left-right"></i>
+                </div>
                 <h3>Pool is Empty</h3>
                 <p>No lunches have been donated to the public pool yet.</p>
                 <p>Check back later or ask friends to donate their lunches!</p>
