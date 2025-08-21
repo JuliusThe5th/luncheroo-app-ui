@@ -123,10 +123,6 @@
     width: 40px;
     height: 40px;
   }
-
-  .bi-moon{
-    font-size: 2rem;
-  }
 }
 </style>
 <script setup lang="ts">

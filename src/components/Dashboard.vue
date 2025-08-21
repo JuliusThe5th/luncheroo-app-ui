@@ -178,7 +178,7 @@ onMounted(async () => {
 }
 
 .dashboard-card {
-  background: rgba(255,255,255,0.85); /* semi-transparent for light theme */
+  background: rgba(255, 255, 255, 0.85); /* semi-transparent for light theme */
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-2xl);
   box-shadow: var(--shadow-xl);
@@ -252,7 +252,7 @@ onMounted(async () => {
 }
 
 .lunch-status-card {
-  background: rgba(248,247,242,0.85); /* semi-transparent for light theme */
+  background: #e8e3e3; /* semi-transparent for light theme */
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-xl);
   padding: var(--space-xl);
@@ -309,12 +309,12 @@ onMounted(async () => {
 
 .lunch-info {
   padding: var(--space-lg);
-  background: rgba(255,255,255,0.85);
+  background: #79daff;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-primary);
 }
 [data-theme="dark"] .lunch-info {
-  background: rgba(32,32,32,0.85);
+  background: #35688c;
 }
 
 .lunch-success,
@@ -425,7 +425,7 @@ onMounted(async () => {
 }
 
 .action-icon.pool {
-  background: linear-gradient(135deg, var(--brand-accent), #2563eb);
+  background:  var(--brand-secondary);
   font-size: 1.5rem;
   text-shadow: 0 0 2px #2563eb, 0 0 1px #2563eb;
 }
@@ -491,12 +491,6 @@ onMounted(async () => {
   transform: translateY(-1px);
 }
 
-.logout-icon {
-  width: 16px;
-  height: 16px;
-  stroke-width: 2;
-}
-
 /* Responsive */
 @media (max-width: 640px) {
   .dashboard-main {
@@ -529,13 +523,6 @@ onMounted(async () => {
     flex-direction: column;
     text-align: center;
     gap: var(--space-md);
-  }
-
-  .lunch-icon,
-  .empty-icon {
-    width: 64px;
-    height: 64px;
-    font-size: 2.5rem;
   }
 
   .action-card {

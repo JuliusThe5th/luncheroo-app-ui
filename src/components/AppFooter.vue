@@ -8,7 +8,7 @@
         </div>
         <div class="footer-decoration">
           <div class="footer-logo">
-            <img src="../assets/images/logo-no-background.png" alt="Luncheroo" class="footer-logo-img" />
+            <img src="https://static.wixstatic.com/media/b66571_d6f3daf98b47425482c8b9ac7c3c0c9b~mv2.png" alt="ITG" class="footer-logo-img" />
           </div>
         </div>
       </div>
@@ -99,15 +99,13 @@ const currentYear = computed(() => new Date().getFullYear());
 }
 
 .footer-logo-img {
-  height: 48px;
+  height: 70px;
   width: auto;
   max-width: 30vw;
-  filter: grayscale(1) opacity(0.4);
   transition: all var(--transition-normal);
 }
 
 .footer-logo:hover .footer-logo-img {
-  filter: grayscale(0) opacity(0.8);
   transform: scale(1.1);
 }
 
