@@ -11,13 +11,14 @@ const lunchNumber = ref(localStorage.getItem('lunchNumber') || 0);
 
 const currentDate = computed(() => {
   const today = new Date();
-  return today.toLocaleDateString(undefined, {
+  return today.toLocaleDateString('en-US', {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
     day: 'numeric'
   });
 });
+
 
 onMounted(async () => {
   // Check authentication
