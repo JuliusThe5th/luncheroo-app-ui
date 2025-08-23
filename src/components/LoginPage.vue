@@ -54,7 +54,7 @@ async function signInWithGoogle() {
       <div class="login-card fade-in">
         <div class="login-header">
           <h1 class="login-title">
-            <img src="../assets/images/logo-no-background.png" alt="Luncheroo" class="login-logo" />
+            <img src="../assets/images/imgbin_ac434d68701ef334b05020efa576e0a1.png" alt="Lunch" class="login-logo" />
           </h1>
           <p class="login-subtitle">Your intelligent lunch management solution</p>
           <div class="login-description">

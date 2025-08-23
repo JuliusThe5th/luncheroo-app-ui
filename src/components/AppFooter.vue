@@ -3,7 +3,7 @@
     <div class="footer-container">
       <div class="footer-content">
         <div class="footer-info">
-          <p class="footer-copyright">© {{ currentYear }} Luncheroo. In cooperation with ITG.</p>
+          <p class="footer-copyright">© {{ currentYear }} Svášek & Orgován. In cooperation with ITG.</p>
           <p class="footer-subtitle">Making lunch management simple and delicious</p>
         </div>
         <div class="footer-decoration">

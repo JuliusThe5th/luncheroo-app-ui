@@ -2,7 +2,9 @@
   <header class="app-header">
     <div class="header-container">
       <div class="header-content">
-        <img src="../assets/images/logo-no-background.png" alt="Luncheroo Logo" class="header-logo" />
+
+        <img src="https://static.wixstatic.com/media/b66571_d6f3daf98b47425482c8b9ac7c3c0c9b~mv2.png" alt="ITG" class="header-logo"/>
+
         <button
           @click="$emit('toggle-theme')"
           class="theme-toggle"
