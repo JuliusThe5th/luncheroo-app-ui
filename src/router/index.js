@@ -4,6 +4,7 @@ import Dashboard from '../components/Dashboard.vue'
 import NotFound from '../components/NotFound.vue'
 import PublicPool from '../components/PublicPool.vue';
 import GiftLunch from '../components/GiftLunch.vue';
+import AdminDashboard from '../components/AdminDashboard.vue';
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -29,6 +30,12 @@ const router = createRouter({
       path: '/public-pool',
       name: 'public-pool',
       component: PublicPool,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/admin',
+      name: 'admin-dashboard',
+      component: AdminDashboard,
       meta: { requiresAuth: true }
     },
     {
