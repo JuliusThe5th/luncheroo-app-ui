@@ -466,6 +466,11 @@ function goBack() {
   stroke-width: 3;
 }
 
+.alert {
+  margin-bottom: var(--space-lg);
+  cursor: pointer;
+}
+
 .no-lunch-state {
   text-align: center;
   padding: var(--space-3xl);
