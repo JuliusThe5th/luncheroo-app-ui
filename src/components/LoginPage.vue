@@ -54,7 +54,7 @@ async function signInWithGoogle() {
       <div class="login-card fade-in">
         <div class="login-header">
           <h1 class="login-title">
-            <img src="../assets/images/imgbin_ac434d68701ef334b05020efa576e0a1.png" alt="Lunch" class="login-logo" />
+            <i class="bi bi-fork-knife"></i>
           </h1>
           <p class="login-subtitle">Your intelligent lunch management solution</p>
           <div class="login-description">
@@ -139,6 +139,12 @@ async function signInWithGoogle() {
   display: flex;
   justify-content: center;
   align-items: center;
+}
+
+.bi-fork-knife{
+  font-size: 10rem;
+  color: var(--brand-secondary);
+  filter: drop-shadow(0 2px 8px rgba(239, 68, 68, 0.3));
 }
 
 .login-subtitle {
