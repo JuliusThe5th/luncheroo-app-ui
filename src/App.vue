@@ -31,10 +31,10 @@ function toggleTheme() {
 
 <template>
   <head>
-    <title>Luncheroo</title>
+    <title>Obědy ITG</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Luncheroo - Your lunch companion" />
+    <meta name="description" content="Obědy ITG" />
     <link rel="icon" type="image/png" href="../assets/images/logo-no-background.png" />
     <link rel="manifest" href="../manifest.json" />
     <meta name="theme-color" content="#ef4444" />
