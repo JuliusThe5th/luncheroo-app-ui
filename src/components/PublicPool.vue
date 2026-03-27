@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '../composables/useAuth.js';
 import { useNotifications } from '../composables/useNotifications.js';
@@ -13,15 +13,6 @@ const { showError, showSuccess, clearNotification, message, messageType } = useN
 const pool = ref({ 1: 0, 2: 0, 3: 0 });
 const userHasLunch = ref(false);
 const isLoading = ref(false);
-const searchQuery = ref('');
-
-// Filtered lunches based on search
-const filteredLunches = computed(() => {
-  if (!searchQuery.value) return availableLunches.value;
-  return availableLunches.value.filter(lunch =>
-    lunch.student_name.toLowerCase().includes(searchQuery.value.toLowerCase())
-  );
-});
 
 // Real-time update handlers
 const handleUserInfoUpdate = (userData) => {
@@ -90,9 +81,9 @@ async function donateLunch() {
     showSuccess('Your lunch was donated to the pool!');
     userHasLunch.value = false;
     await fetchPool();
-    isLoading.value = false;
   } catch (error) {
     showError('Failed to donate lunch.');
+  } finally {
     isLoading.value = false;
   }
 }
@@ -107,9 +98,9 @@ async function claimLunch(lunchNumber) {
     showSuccess(`You claimed lunch #${lunchNumber}!`);
     userHasLunch.value = true;
     await fetchPool();
-    isLoading.value = false;
   } catch (error) {
     showError('Failed to claim lunch.');
+  } finally {
     isLoading.value = false;
   }
 }

@@ -1,5 +1,5 @@
 // API utility functions
-import {socketAPI, getJWTToken} from './socket.js';
+import {socketAPI, getJWTToken, setJWTToken, clearJWTToken} from './socket.js';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
@@ -51,7 +51,6 @@ export const api = {
     if (response && response.message === 'Authentication successful') {
       // If backend returns token in response, use it immediately
       if (response.token) {
-        const { setJWTToken } = await import('./socket.js');
         setJWTToken(response.token);
         socketAPI.connect(response.token);
       } else {
@@ -64,11 +63,8 @@ export const api = {
 
   logout: async () => {
     socketAPI.disconnect();
-
-    const { clearJWTToken } = await import('./socket.js');
     clearJWTToken();
-
-    return await apiRequest('/api/logout', {method: 'POST'});
+    return apiRequest('/api/logout', {method: 'POST'});
   },
 
   // GET requests replaced with Socket.IO

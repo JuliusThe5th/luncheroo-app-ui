@@ -10,7 +10,7 @@ const { showError } = useNotifications();
 
 const router = useRouter();
 const { logout } = useAuth();
-const refreshInterval = ref(null);
+let refreshInterval = null;
 
 // Reactive data
 const currentTime = ref('');
@@ -23,7 +23,6 @@ const stats = ref({
 });
 const recentAssignments = ref([]);
 const isLoading = ref(true);
-const betaBannerVisible = ref(true);
 
 // Time update interval
 let timeInterval = null;
@@ -96,28 +95,18 @@ onUnmounted(() => {
 
 // Function to start automatic refresh (reduced frequency since we have real-time updates)
 function startAutoRefresh() {
-  // Clear any existing interval
-  if (refreshInterval.value) {
-    clearInterval(refreshInterval.value);
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
   }
-
-  // Set up new interval to refresh every 5 minutes (300000ms) instead of 1 minute
-  // since we now have real-time updates
-  refreshInterval.value = setInterval(() => {
-    fetchDashboardData();
-  }, 300000);
+  // Refresh every 5 minutes since we have real-time updates
+  refreshInterval = setInterval(fetchDashboardData, 300000);
 }
 
-// Function to stop automatic refresh
 function stopAutoRefresh() {
-  if (refreshInterval.value) {
-    clearInterval(refreshInterval.value);
-    refreshInterval.value = null;
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
+    refreshInterval = null;
   }
-}
-
-async function refreshData() {
-  await fetchDashboardData();
 }
 
 function updateTime() {
@@ -147,9 +136,6 @@ async function fetchDashboardData() {
 
     console.log(usersResponse);
 
-    // Calculate pool totals
-    const poolData = poolResponse;
-
     // Calculate student statistics
     const allUsers = usersResponse.users || [];
     const usersWithLunch = allUsers.filter(users => users.has_lunch === true).length;
@@ -164,9 +150,9 @@ async function fetchDashboardData() {
     stats.value = {
       lunchCount: usersWithLunch,
       availableCount: {
-        1: poolData["lunch 1"],
-        2: poolData["lunch 2"],
-        3: poolData["lunch 3"]
+        1: poolResponse["lunch 1"],
+        2: poolResponse["lunch 2"],
+        3: poolResponse["lunch 3"]
       },
       totalStudents: allUsers.length,
       studentsWithLunch: usersWithLunch,
@@ -195,10 +181,6 @@ function goToCardScanner() {
 
 function goToCardAssignment() {
   router.push('/admin/card-assignment');
-}
-
-function closeBetaBanner() {
-  betaBannerVisible.value = false;
 }
 </script>
 
@@ -320,8 +302,8 @@ function closeBetaBanner() {
             <div class="analytics-card recent-assignments">
               <h2 class="analytics-title">Recent Lunch Assignments</h2>
               <div class="assignments-list">
-                <div v-if="recentAssignments.recent_lunches && recentAssignments.recent_lunches.length > 0" class="assignments-content">
-                  <div     v-for="assignment in recentAssignments.recent_lunches" :key="`${assignment.student_name}-${assignment.timestamp}`" class="assignment-item">
+                <div v-if="recentAssignments.length > 0" class="assignments-content">
+                  <div v-for="assignment in recentAssignments" :key="`${assignment.student_name}-${assignment.timestamp}`" class="assignment-item">
                     <span class="assignment-name">{{ assignment.student_name }}</span>
                     <span class="assignment-lunch">Lunch #{{ assignment.lunch_id }}</span>
                     <span class="assignment-timestamp">{{ assignment.timestamp }}</span>

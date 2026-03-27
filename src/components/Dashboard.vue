@@ -1,601 +1,225 @@
-<script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue';
-import { useRouter } from 'vue-router';
-import { useAuth } from '../composables/useAuth.js';
-import { api, socketAPI } from '../utils/api.js';
-import { withSocketRetry } from '../composables/useSocketRetry.js';
-
-const router = useRouter();
-const { user, requireAuth, logout } = useAuth();
-const hasLunchToday = ref(false);
-const lunchNumber = ref(localStorage.getItem('lunchNumber') || 0);
-
-const isLoading = ref(true);
-
-const currentDate = computed(() => {
-  const today = new Date();
-  return today.toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
-});
-
-// Real-time update handler
-const handleUserInfoUpdate = (userData) => {
-  // Update user name if available
-  if (userData?.name) {
-    user.value.name = userData.name;
-  }
-
-  // Extract lunch information
-  if (userData.lunch) {
-    if (userData.lunch.hasLunch) {
-      hasLunchToday.value = true;
-      lunchNumber.value = userData.lunch.number;
-      localStorage.setItem('lunchNumber', lunchNumber.value);
-    } else {
-      hasLunchToday.value = false;
-      localStorage.removeItem('lunchNumber');
-    }
-  } else {
-    hasLunchToday.value = false;
-  }
-};
-
-// Function to load user info with retry logic
-const loadUserInfo = async () => {
-  try {
-    // Get initial user info via socket with retry
-    const userData = await withSocketRetry(() => api.getUserInfo());
-    handleUserInfoUpdate(userData);
-    isLoading.value = false;
-  } catch (error) {
-    console.error('Error loading user info:', error);
-    return Promise.reject(error);
-  }
-};
-
-onMounted(async () => {
-  // Check authentication
-  if (!requireAuth()) return;
-
-
-  // Set up real-time updates listener
-  try {
-    socketAPI.connect()
-    socketAPI.onUserInfoUpdates(handleUserInfoUpdate);
-  } catch (error) {
-    await router.push('/server-error');
-  }
-
-  try {
-    // Load user info with retry logic
-    await loadUserInfo();
-  } catch (error) {
-    await router.push('/server-error');
-  }
-});
-
-onUnmounted(() => {
-  // Clean up real-time listeners
-  socketAPI.offUserInfoUpdates(handleUserInfoUpdate);
-});
-</script>
-
 <template>
-  <main class="dashboard-main">
-    <div class="dashboard-container">
-      <div class="dashboard-card fade-in">
-        <div class="dashboard-header">
-          <div class="user-profile">
-            <div class="user-avatar">
-              <img
-                v-if="user.picture"
-                :src="user.picture"
-                alt="Profile"
-                class="profile-avatar"
-              />
-              <span v-else>
-                      {{ user.name.charAt(0).toUpperCase() }}
-              </span>
-            </div>
-            <div class="user-info">
-              <h1 class="welcome-text">Welcome back!</h1>
-              <h2 class="user-name">{{ user.name }}</h2>
-              <p class="current-date">{{ currentDate }}</p>
-            </div>
-          </div>
+  <div class="dashboard-container">
+    <header class="dashboard-header">
+      <img src="../assets/images/logo-no-background.png" alt="Logo" class="header-logo" />
+      <div class="user-info">
+        <span class="welcome-message">Hello, {{ userName }}</span>
+        <button class="logout-btn" @click="logout">Logout</button>
+      </div>
+    </header>
+
+    <main class="dashboard-content">
+      <div class="lunch-status">
+        <h2 class="lunch-heading">Your lunch today:</h2>
+        <div v-if="hasLunchToday" class="lunch-info">
+          {{ lunchCount }}
         </div>
-
-        <div class="dashboard-content">
-          <div class="lunch-status-card">
-            <div class="status-header">
-              <h3>Today's Lunch Status</h3>
-              <div class="status-indicator" :class="{ 'has-lunch': hasLunchToday }">
-                <div class="indicator-dot"></div>
-                <span>{{ hasLunchToday ? 'Active' : 'No Order' }}</span>
-              </div>
-            </div>
-
-            <div class="lunch-info">
-              <div v-if="isLoading" class="loading-state">
-                <div class="loading-spinner"></div>
-              </div>
-
-              <div v-else-if="hasLunchToday" class="lunch-success">
-                <i class="bi bi-fork-knife lunch-icon"></i>
-                <div class="lunch-details">
-                  <h4>Lunch Confirmed</h4>
-                  <p>You have lunch ordered for today</p>
-                  <div class="lunch-number">
-                    <span class="order-badge">Order #{{ lunchNumber }}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div v-else class="lunch-empty">
-                <i class="bi bi-fork-knife lunch-icon"></i>
-                <div class="empty-details">
-                  <h4>No Lunch Today</h4>
-                  <p>You don't have any lunch ordered for today</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="actions-section">
-            <h3 class="actions-title">Quick Actions</h3>
-            <div class="action-grid">
-              <router-link to="/gift-lunch" class="action-card">
-                <div class="action-icon gift">
-                  <i class="bi bi-gift-fill"></i>
-                </div>
-                <div class="action-content">
-                  <h4>Gift Your Lunch</h4>
-                  <p>Share your meal with a friend</p>
-                </div>
-                <div class="action-arrow">→</div>
-              </router-link>
-
-              <router-link to="/public-pool" class="action-card">
-                <div class="action-icon pool">
-                  <i class="bi bi-arrow-left-right"></i>
-                </div>
-                <div class="action-content">
-                  <h4>Public Lunch Pool</h4>
-                  <p>Explore available lunches</p>
-                </div>
-                <div class="action-arrow">→</div>
-              </router-link>
-            </div>
-          </div>
-        </div>
-
-        <div class="dashboard-footer">
-          <button @click="logout" class="logout-btn">
-            <i class="bi bi-box-arrow-right"></i>
-            Logout
-          </button>
+        <div v-else class="no-lunch-info">
+          You don't have lunch for today
         </div>
       </div>
-    </div>
-  </main>
+    </main>
+  </div>
 </template>
 
+<script setup>
+import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+
+const router = useRouter();
+const userName = ref(localStorage.getItem('user_name') || 'User');
+const hasLunchToday = ref(false);
+const lunchCount = ref(0);
+
+onMounted(async () => {
+  try {
+    console.log('Dashboard mounted, checking authentication...');
+    // Get token from localStorage
+    const token = localStorage.getItem('auth_token');
+
+    console.log('Auth token exists:', !!token);
+
+    if (!token) {
+      console.log('No token found, redirecting to login');
+      router.push('/');
+      return;
+    }
+
+    // Since we already have the user's name from Google OAuth stored in localStorage,
+    // we can display it immediately while we wait for the API call
+    userName.value = localStorage.getItem('user_name') || 'User';
+
+    try {
+      // Get user info with token authentication
+      console.log('Fetching user info...');
+
+      const userResponse = await fetch(`/api/user-info`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      console.log('User info response status:', userResponse.status);
+
+      if (userResponse.ok) {
+        try {
+          const userData = await userResponse.json();
+          console.log('User data received:', userData);
+
+          if (userData && userData.name) {
+            userName.value = userData.name;
+          }
+
+          // Get lunch information
+          await getLunchInfo(token);
+        } catch (parseError) {
+          console.error('Error parsing user info response:', parseError);
+          // Continue showing the dashboard with the name from localStorage
+        }
+      } else {
+        console.log('User info request failed, but continuing with dashboard');
+        // Don't redirect - just show dashboard with localStorage data
+      }
+    } catch (apiError) {
+      console.error('API request error:', apiError);
+      // Don't redirect - show dashboard with localStorage data
+    }
+  } catch (error) {
+    console.error('Dashboard initialization error:', error);
+    // Only redirect if there's a fatal error
+    if (error.message === 'AUTHENTICATION_REQUIRED') {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user_name');
+      router.push('/');
+    }
+  }
+});
+
+async function getLunchInfo(token) {
+  try {
+    // Get lunch information using token authentication
+    const response = await fetch(`/api/lunch/today`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Lunch info response error:', errorText);
+      throw new Error('Failed to fetch lunch information');
+    }
+
+    // Try to parse the response as JSON
+    let lunchData;
+    try {
+      const responseText = await response.text();
+      console.log('Raw lunch info response:', responseText);
+      lunchData = responseText ? JSON.parse(responseText) : {};
+    } catch (e) {
+      console.error('Error parsing lunch info response:', e);
+      throw new Error('Invalid lunch data from server');
+    }
+
+    if (lunchData.hasLunch) {
+      hasLunchToday.value = true;
+      lunchCount.value = lunchData.count || 1;
+    } else {
+      hasLunchToday.value = false;
+    }
+  } catch (error) {
+    console.error('Error fetching lunch data:', error);
+    // Keep the mock data if there's an error
+  }
+}
+
+function logout() {
+  // No need to call logout endpoint since we're not using cookies
+  // Just clear the local storage and redirect to login
+  localStorage.removeItem('auth_token');
+  localStorage.removeItem('user_name');
+  router.push('/');
+}
+</script>
+
 <style scoped>
-.dashboard-main {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-lg);
-  min-height: calc(100vh - 160px);
-  background: transparent;
-  position: relative;
-}
-
 .dashboard-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
   width: 100%;
-  max-width: 600px;
-  position: relative;
-}
-
-.dashboard-card {
-  background: rgba(255, 255, 255, 0.85); /* semi-transparent for light theme */
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-xl);
-  overflow: hidden;
-  transition: all var(--transition-normal);
-}
-[data-theme="dark"] .dashboard-card {
-  background: rgba(32,32,32,0.85); /* semi-transparent for dark theme */
-}
-
-.dashboard-card:hover {
-  box-shadow: var(--shadow-brand);
 }
 
 .dashboard-header {
-  padding: var(--space-2xl);
-  background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
-  border-bottom: 1px solid var(--border-primary);
-}
-
-.user-profile {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: var(--space-lg);
+  padding: 1rem 2rem;
+  background-color: var(--color-background-soft);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.user-avatar{
-  width: 80px;
-  height: 80px;
-  border-radius: var(--radius-full);
-  background: var(--brand-primary);
-  color: var(--text-inverse);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: var(--font-weight-bold);
-  font-size: var(--font-size-4xl);
-}
-
-.profile-avatar {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: var(--radius-full);
-  border: 3px solid var(--border-primary);
-  display: block;
-  transition: all var(--transition-fast);
-}
-
-.profile-avatar:hover {
-  transform: scale(1.05);
-  border-color: var(--brand-primary);
+.header-logo {
+  height: 40px;
 }
 
 .user-info {
-  flex: 1;
-}
-
-.welcome-text {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-secondary);
-  margin: 0 0 var(--space-xs) 0;
-}
-
-.user-name {
-  font-size: var(--font-size-3xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--brand-primary);
-  margin: 0 0 var(--space-xs) 0;
-  letter-spacing: -0.02em;
-}
-
-.current-date {
-  font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
-  margin: 0;
-}
-
-.dashboard-content {
-  padding: var(--space-2xl);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2xl);
-}
-
-.lunch-status-card {
-  background: #e8e3e3; /* semi-transparent for light theme */
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-xl);
-  padding: var(--space-xl);
-  transition: all var(--transition-fast);
-}
-[data-theme="dark"] .lunch-status-card {
-  background: rgba(36,36,36,0.85);
-}
-
-.status-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--space-lg);
+  gap: 1rem;
 }
 
-.status-header h3 {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.status-indicator {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  background: var(--error-bg);
-  color: var(--error-text);
-  border-radius: var(--radius-full);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  transition: all var(--transition-fast);
-}
-
-.status-indicator.has-lunch {
-  background: var(--success-bg);
-  color: var(--success-text);
-}
-
-.indicator-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-full);
-  background: currentColor;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-.lunch-info {
-  padding: var(--space-lg);
-  background: #79daff;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-primary);
-}
-[data-theme="dark"] .lunch-info {
-  background: #35688c;
-}
-
-/* Loading State */
-.loading-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-secondary);
-}
-
-.loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid var(--border-primary);
-  border-top: 4px solid var(--brand-primary);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.lunch-success,
-.lunch-empty {
-  display: flex;
-  align-items: center;
-  gap: var(--space-lg);
-}
-
-.lunch-icon {
-  font-size: 2.5rem;
-}
-
-.lunch-details h4,
-.empty-details h4 {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-  margin: 0 0 var(--space-xs) 0;
-}
-
-.lunch-details p,
-.empty-details p {
-  font-size: var(--font-size-base);
-  color: var(--text-secondary);
-  margin: 0 0 var(--space-md) 0;
-}
-
-.lunch-number {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.order-badge {
-  font-size: var(--font-size-2xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--brand-primary);
-  background: var(--bg-card);
-  padding: var(--space-xs) var(--space-md);
-  border-radius: var(--radius-md);
-}
-
-.actions-section {
-  margin-top: var(--space-lg);
-}
-
-.actions-title {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-  margin: 0 0 var(--space-lg) 0;
-}
-
-.action-grid {
-  display: grid;
-  gap: var(--space-md);
-}
-
-.action-card {
-  display: flex;
-  align-items: center;
-  gap: var(--space-lg);
-  padding: var(--space-lg);
-  background: var(--bg-card);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-lg);
-  text-decoration: none;
-  transition: all var(--transition-fast);
-  position: relative;
-  overflow: hidden;
-}
-
-.action-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, var(--bg-overlay), transparent);
-  transition: left var(--transition-slow);
-}
-
-.action-card:hover::before {
-  left: 100%;
-}
-
-.action-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
-  border-color: var(--brand-primary);
-}
-
-.action-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-lg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--font-size-xl);
-  transition: all var(--transition-fast);
-}
-
-.action-icon.gift {
-  background: linear-gradient(135deg, #fbbf24, #f59e0b);
-}
-
-.action-icon.pool {
-  background:  var(--brand-secondary);
-  font-size: 1.5rem;
-  text-shadow: 0 0 2px #2563eb, 0 0 1px #2563eb;
-}
-
-.action-card:hover .action-icon {
-  transform: scale(1.1);
-}
-
-.action-content {
-  flex: 1;
-}
-
-.action-content h4 {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-  margin: 0 0 var(--space-xs) 0;
-}
-
-.action-content p {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  margin: 0;
-}
-
-.action-arrow {
-  font-size: var(--font-size-xl);
-  color: var(--text-tertiary);
-  transition: all var(--transition-fast);
-}
-
-.action-card:hover .action-arrow {
-  color: var(--brand-primary);
-  transform: translateX(4px);
-}
-
-.dashboard-footer {
-  padding: var(--space-xl) var(--space-2xl);
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border-primary);
-  text-align: center;
+.welcome-message {
+  font-weight: 600;
+  font-size: 1.1rem;
 }
 
 .logout-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-md) var(--space-lg);
-  background: transparent;
-  color: var(--text-secondary);
-  border: 1px solid var(--border-secondary);
-  border-radius: var(--radius-lg);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
+  background-color: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
 }
 
 .logout-btn:hover {
-  background: var(--error-bg);
-  color: var(--error-text);
-  border-color: var(--error-border);
-  transform: translateY(-1px);
+  background-color: rgba(0, 0, 0, 0.05);
 }
 
-/* Responsive */
-@media (max-width: 640px) {
-  .dashboard-main {
-    padding: var(--space-md);
-  }
+.dashboard-content {
+  flex: 1;
+  padding: 2rem;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
 
-  .dashboard-header,
-  .dashboard-content,
-  .dashboard-footer {
-    padding: var(--space-lg);
-  }
+.lunch-status {
+  background-color: var(--color-background-soft);
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  min-width: 300px;
+}
 
-  .profile-avatar {
-    width: 64px;
-    height: 64px;
-  }
+.lunch-heading {
+  margin-bottom: 1.5rem;
+  font-size: 1.4rem;
+  color: var(--color-heading);
+}
 
-  .user-profile {
-    flex-direction: column;
-    text-align: center;
-    gap: var(--space-md);
-  }
+.lunch-info {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--color-heading);
+}
 
-  .user-name {
-    font-size: var(--font-size-2xl);
-  }
-
-  .lunch-success,
-  .lunch-empty {
-    flex-direction: column;
-    text-align: center;
-    gap: var(--space-md);
-  }
-
-  .action-card {
-    padding: var(--space-md);
-    gap: var(--space-md);
-  }
-
-  .action-icon {
-    width: 40px;
-    height: 40px;
-    font-size: var(--font-size-lg);
-  }
+.no-lunch-info {
+  font-size: 1.2rem;
+  color: #888;
+  font-style: italic;
 }
 </style>

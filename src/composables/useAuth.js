@@ -59,8 +59,8 @@ export function useAuth() {
 
 
     // Check if user is authenticated
-  async function checkAuth() {
-      return isAuthenticated.value;
+  function checkAuth() {
+    return isAuthenticated.value;
   }
 
   // Logout function
