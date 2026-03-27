@@ -1,12 +1,14 @@
 // API utility functions
+import {socketAPI, getJWTToken} from './socket.js';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
-// Generic API request function
+// Generic API request function (for POST requests only now)
 export async function apiRequest(endpoint, options = {}) {
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
 
   const defaultOptions = {
-    credentials: 'include', // This ensures cookies (including JWT) are sent
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...options.headers
@@ -28,7 +30,6 @@ export async function apiRequest(endpoint, options = {}) {
       throw new Error(errorMessage);
     }
 
-    // Handle empty responses
     const text = await response.text();
     return text ? JSON.parse(text) : {};
   } catch (error) {
@@ -37,24 +38,76 @@ export async function apiRequest(endpoint, options = {}) {
   }
 }
 
-// Specific API functions
+// Combined API functions - Socket.IO for GET requests, HTTP for POST requests
 export const api = {
-  // Authentication
-  verifyToken: (userData) => apiRequest('/api/verify-token', {
-    method: 'POST',
-    body: JSON.stringify(userData)
+  // Authentication (HTTP POST - with immediate socket connection)
+  verifyToken: async (userData) => {
+    const response = await apiRequest('/api/verify-token', {
+      method: 'POST',
+      body: JSON.stringify(userData)
+    });
+
+    // After successful login, immediately establish socket connection
+    if (response && response.message === 'Authentication successful') {
+      // If backend returns token in response, use it immediately
+      if (response.token) {
+        const { setJWTToken } = await import('./socket.js');
+        setJWTToken(response.token);
+        socketAPI.connect(response.token);
+      } else {
+        socketAPI.connect();
+      }
+    }
+
+    return response;
+  },
+
+  logout: async () => {
+    socketAPI.disconnect();
+
+    const { clearJWTToken } = await import('./socket.js');
+    clearJWTToken();
+
+    return await apiRequest('/api/logout', {method: 'POST'});
+  },
+
+  // GET requests replaced with Socket.IO
+  getUserInfo: () => socketAPI.getUserInfo(),
+  getStudents: () => socketAPI.getStudents(),
+  getAllStudents: () => socketAPI.getAllStudents(),
+  getLunches: () => socketAPI.getLunches(),
+  getRecentLunches: () => socketAPI.getRecentLunches(),
+
+  // POST requests remain as HTTP (unchanged)
+  assignCard: (studentData) => {
+    const token = getJWTToken();
+    return apiRequest('/api/assign_card', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(studentData)
+    });
+  },
+
+  deleteStudent: (studentId) => apiRequest(`/api/students/${studentId}`, {
+    method: 'DELETE'
   }),
 
-  getUserInfo: () => apiRequest('/api/user-info'),
-
-  logout: () => apiRequest('/api/logout', { method: 'POST' }),
-
-  // Students
-  getStudents: () => apiRequest('/api/students'),
-
-  // Lunch operations
   giftLunch: (recipientData) => apiRequest('/api/give_lunch_direct', {
     method: 'POST',
     body: JSON.stringify(recipientData)
+  }),
+
+  requestLunch: (lunchData) => apiRequest('/api/request_lunch', {
+    method: 'POST',
+    body: JSON.stringify(lunchData)
+  }),
+
+  giveLunch: () => apiRequest('/api/give_lunch', {
+    method: 'POST'
   })
 };
+
+// Export socket API for direct access to real-time features
+export { socketAPI };

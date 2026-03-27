@@ -1,86 +1,95 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { useAuth } from '../composables/useAuth.js';
+import { io } from 'socket.io-client';
 import { useNotifications } from '../composables/useNotifications.js';
 import { api, socketAPI } from '../utils/api.js';
 import { withSocketRetry } from '../composables/useSocketRetry.js';
 
 const router = useRouter();
-const { requireAuth } = useAuth();
 const { showError, showSuccess, clearNotification, message, messageType } = useNotifications();
 
 const students = ref([]);
 const selectedStudent = ref(null);
 const searchQuery = ref('');
 const isLoading = ref(false);
-const userHasLunch = ref(false);
+const cardUid = ref('');
+const cardStatus = ref('Waiting for card...');
+const isCardScanned = ref(false);
+
+// Socket connection for card reader
+let cardReaderSocket = null;
 
 // Computed property for filtered students (only those without lunch)
 const filteredStudents = computed(() => {
-  const noLunch = students.value.filter(s => !s.has_lunch);
+  const noLunch = students.value.filter(s => !s.has_card);
   if (!searchQuery.value) return noLunch;
   const q = searchQuery.value.toLowerCase();
   return noLunch.filter(student =>
-    student.full_name.toLowerCase().includes(q)
+      student.full_name.toLowerCase().includes(q)
   );
 });
 
-// Real-time update handlers
-const handleUserInfoUpdate = (userData) => {
-  const hasLunch = userData.lunch?.hasLunch || false;
-  userHasLunch.value = hasLunch;
-
-  if (!hasLunch) {
-    showError("You don't have lunch to gift.");
-  }
-};
-
+// Real-time student updates handler
 const handleStudentUpdates = (data) => {
   console.log('Real-time students update received:', data);
   students.value = data.students || [];
 };
 
 onMounted(async () => {
-  // Check authentication
-  if (!requireAuth()) return;
-
-  // Set up real-time listeners
-  socketAPI.onUserInfoUpdates(handleUserInfoUpdate);
+  // Set up real-time listeners for students
   socketAPI.onStudentUpdates(handleStudentUpdates);
 
-  // Check if user has lunch to gift and load students
-  await Promise.all([
-    checkUserLunchStatus(),
-    loadStudents()
-  ]);
+  // Initialize card reader socket
+  initializeCardReaderSocket();
+
+  // Load students
+  await loadStudents();
 });
 
 onUnmounted(() => {
   // Clean up real-time listeners
-  socketAPI.offUserInfoUpdates(handleUserInfoUpdate);
   socketAPI.offStudentUpdates(handleStudentUpdates);
+
+  // Disconnect card reader socket
+  if (cardReaderSocket) {
+    cardReaderSocket.disconnect();
+  }
 });
 
-async function checkUserLunchStatus() {
-  try {
-    const userData = await withSocketRetry(() => api.getUserInfo());
-    userHasLunch.value = userData.lunch?.hasLunch || false;
+function initializeCardReaderSocket() {
+  cardReaderSocket = io('http://localhost:3001', {
+    transports: ['websocket'],
+    upgrade: false
+  });
 
-    if (!userHasLunch.value) {
-      showError("You don't have lunch to gift.");
+  cardReaderSocket.on('connect', () => {
+    console.log('Connected to card reader server');
+  });
+
+  cardReaderSocket.on('card_scanned', (data) => {
+    if (data.uid) {
+      cardStatus.value = `Card Detected! UID: ${data.uid}`;
+      cardUid.value = data.uid;
+      isCardScanned.value = true;
+      showSuccess('Card scanned successfully!');
+    } else {
+      cardStatus.value = 'Invalid scan data';
+      showError('No UID received from card reader.');
     }
-  } catch (error) {
-    console.error('Error checking lunch status:', error);
-    showError('Failed to check lunch status.');
-  }
+  });
+
+  cardReaderSocket.on('disconnect', () => {
+    console.log('Disconnected from card reader server');
+    cardStatus.value = 'Disconnected from card reader...';
+  });
 }
 
 async function loadStudents() {
   try {
     isLoading.value = true;
     const data = await withSocketRetry(() => api.getStudents());
-    students.value = data.students.filter(student => !student.has_lunch) || [];
+    students.value = data.students || [];
   } catch (error) {
     console.error('Error loading students:', error);
     showError('Failed to load students list.');
@@ -89,64 +98,94 @@ async function loadStudents() {
   }
 }
 
-async function giftLunch() {
+async function assignCard() {
   if (!selectedStudent.value) {
-    showError('Please select a student to gift your lunch to.');
+    showError('Please select a student to assign the card to.');
     return;
   }
 
-  if (!userHasLunch.value) {
-    showError("You don't have lunch to gift.");
+  if (!cardUid.value) {
+    showError('Please scan a card first.');
     return;
   }
 
   try {
     isLoading.value = true;
 
-    await api.giftLunch({
-      student_id: selectedStudent.value.id,
+    // Parse full_name to get name and surname
+    const nameParts = selectedStudent.value.full_name.split(' ');
+    const name = nameParts[0];
+    const surname = nameParts.slice(1).join(' ');
+
+    await api.assignCard({
+      name: name,
+      surname: surname,
+      card_uid: cardUid.value
     });
 
-    showSuccess(`Successfully gifted your lunch to ${selectedStudent.value.full_name}!`);
-    userHasLunch.value = false;
-    selectedStudent.value = null;
+    showSuccess(`Successfully assigned card to ${selectedStudent.value.full_name}!`);
 
-    // Update localStorage to reflect that user no longer has lunch
-    localStorage.removeItem('lunchNumber');
+    // Reset state
+    selectedStudent.value = null;
+    cardUid.value = '';
+    cardStatus.value = 'Waiting for card...';
+    isCardScanned.value = false;
+
+    // Reload students to get updated data
+    await loadStudents();
   } catch (error) {
-    console.error('Error gifting lunch:', error);
-    showError(error.message || 'Failed to gift lunch.');
+    console.error('Error assigning card:', error);
+    showError(error.message || 'Failed to assign card.');
   } finally {
     isLoading.value = false;
   }
 }
 
 function goBack() {
-  router.push('/dashboard');
+  router.push('/admin');
 }
 </script>
 
 <template>
-  <main class="gift-lunch-main">
-    <div class="gift-lunch-container">
-      <div class="gift-lunch-card fade-in">
-        <div class="gift-lunch-header">
+  <main class="card-assignment-main">
+    <div class="card-assignment-container">
+      <div class="card-assignment-card fade-in">
+        <div class="card-assignment-header">
           <button class="back-btn" @click="goBack">
             <svg class="back-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
-            Back to Dashboard
+            Back to Admin
           </button>
 
-          <h1 class="gift-lunch-title">Gift Your Lunch</h1>
-          <p class="gift-lunch-subtitle">Select a student to share your meal with</p>
+          <h1 class="card-assignment-title">Assign NFC Card</h1>
+          <p class="card-assignment-subtitle">Select a student and scan their card</p>
         </div>
 
-        <div class="gift-lunch-content">
+        <div class="card-assignment-content">
           <!-- Message display -->
           <div v-if="message" class="alert" :class="`alert-${messageType}`" @click="clearNotification">
             {{ message }}
             <span class="alert-close">×</span>
+          </div>
+
+          <!-- Card Status Section -->
+          <div class="card-status-section">
+            <div class="card-status-card" :class="{
+              'status-success': isCardScanned,
+              'status-warning': cardStatus.includes('Already Assigned'),
+              'status-waiting': !isCardScanned && !cardStatus.includes('Already Assigned')
+            }">
+              <i class="status-icon" :class="{
+                'bi bi-check-circle-fill': isCardScanned,
+                'bi bi-exclamation-triangle-fill': cardStatus.includes('Already Assigned'),
+                'bi bi-card-heading': !isCardScanned && !cardStatus.includes('Already Assigned')
+              }"></i>
+              <div class="status-info">
+                <h3 class="status-title">{{ isCardScanned ? 'Card Ready' : 'Scan Card' }}</h3>
+                <p class="status-text">{{ cardStatus }}</p>
+              </div>
+            </div>
           </div>
 
           <!-- Search bar -->
@@ -161,13 +200,12 @@ function goBack() {
                 type="text"
                 placeholder="Search for a student..."
                 class="search-input"
-                :disabled="!userHasLunch"
               />
             </div>
           </div>
 
           <!-- Students list -->
-          <div v-if="userHasLunch" class="students-section">
+          <div class="students-section">
             <div v-if="isLoading" class="loading-state">
               <div class="spinner"></div>
               <p>Loading students...</p>
@@ -181,7 +219,7 @@ function goBack() {
             </div>
 
             <div v-else class="student-list">
-              <h3 class="list-title">Available Students ({{ filteredStudents.length }})</h3>
+              <h3 class="list-title">Select Student ({{ filteredStudents.length }})</h3>
               <div class="student-grid">
                 <div
                   v-for="student in filteredStudents"
@@ -190,7 +228,6 @@ function goBack() {
                   :class="{ selected: selectedStudent && selectedStudent.id === student.id }"
                   @click="selectedStudent = student"
                 >
-                  <!-- Replace the .student-avatar div in the student-card -->
                   <div class="student-avatar">
                     <img v-if="student.picture" :src="student.picture" alt="Profile" class="avatar-img" />
                     <span v-else>
@@ -199,7 +236,7 @@ function goBack() {
                   </div>
                   <div class="student-info">
                     <h4 class="student-name">{{ student.full_name }}</h4>
-                    <p class="student-status">Available</p>
+                    <p class="student-status">{{ student.card_id ? 'Card Assigned' : 'No Card' }}</p>
                   </div>
                   <div v-if="selectedStudent && selectedStudent.id === student.id" class="selected-indicator">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -210,38 +247,23 @@ function goBack() {
               </div>
             </div>
           </div>
-
-          <!-- No lunch state -->
-          <div v-else class="no-lunch-state">
-            <div class="no-lunch-icon">
-              <i class="bi bi-fork-knife lunch-icon"></i>
-            </div>
-            <h3>No Lunch to Gift</h3>
-            <p>You don't have any lunch ordered for today that you can gift to others.</p>
-            <button @click="goBack" class="btn btn-secondary">
-              Return to Dashboard
-            </button>
-          </div>
         </div>
 
-        <!-- Gift button -->
-        <div v-if="userHasLunch" class="gift-lunch-footer">
+        <!-- Assign button -->
+        <div class="card-assignment-footer">
           <button
-            @click="giftLunch"
-            :disabled="!selectedStudent || isLoading"
-            class="btn btn-primary gift-btn"
+            @click="assignCard"
+            :disabled="!selectedStudent || !isCardScanned || isLoading"
+            class="btn btn-primary assign-btn"
           >
             <svg v-if="isLoading" class="btn-icon spinner" viewBox="0 0 24 24">
               <circle cx="12" cy="12" r="10"/>
             </svg>
-            <svg v-else class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-6"/>
-              <path d="M12 2v10m0 0l3-3m-3 3l-3-3"/>
-            </svg>
-            {{ isLoading ? 'Gifting...' : 'Gift Lunch' }}
+            <i v-else class="bi bi-card-heading btn-icon"></i>
+            {{ isLoading ? 'Assigning...' : 'Assign Card' }}
           </button>
-          <p class="gift-disclaimer">
-            This will transfer your lunch to the selected student
+          <p class="assign-disclaimer">
+            This will assign the scanned card to the selected student
           </p>
         </div>
       </div>
@@ -250,7 +272,7 @@ function goBack() {
 </template>
 
 <style scoped>
-.gift-lunch-main {
+.card-assignment-main {
   flex: 1;
   display: flex;
   align-items: center;
@@ -259,25 +281,26 @@ function goBack() {
   min-height: calc(100vh - 160px);
 }
 
-.gift-lunch-container {
+.card-assignment-container {
   width: 100%;
   max-width: 700px;
   position: relative;
 }
 
-.gift-lunch-card {
-  background: rgba(255,255,255,0.85); /* semi-transparent for light theme */
+.card-assignment-card {
+  background: rgba(255,255,255,0.85);
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-2xl);
   box-shadow: var(--shadow-xl);
   overflow: hidden;
   transition: all var(--transition-normal);
 }
-[data-theme="dark"] .gift-lunch-card {
-  background: rgba(32,32,32,0.85); /* semi-transparent for dark theme */
+
+[data-theme="dark"] .card-assignment-card {
+  background: rgba(32,32,32,0.85);
 }
 
-.gift-lunch-header {
+.card-assignment-header {
   padding: var(--space-2xl);
   background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
   border-bottom: 1px solid var(--border-primary);
@@ -310,7 +333,7 @@ function goBack() {
   stroke-width: 2;
 }
 
-.gift-lunch-title {
+.card-assignment-title {
   font-size: var(--font-size-3xl);
   font-weight: var(--font-weight-bold);
   color: var(--text-primary);
@@ -318,16 +341,81 @@ function goBack() {
   letter-spacing: -0.02em;
 }
 
-.gift-lunch-subtitle {
+.card-assignment-subtitle {
   font-size: var(--font-size-lg);
   color: var(--text-secondary);
   margin: 0;
 }
 
-.gift-lunch-content {
+.card-assignment-content {
   padding: var(--space-2xl);
 }
 
+/* Card Status Section */
+.card-status-section {
+  margin-bottom: var(--space-2xl);
+}
+
+.card-status-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-xl);
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  transition: all var(--transition-fast);
+}
+
+.card-status-card.status-success {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+
+.card-status-card.status-warning {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+
+.card-status-card.status-waiting {
+  border-color: var(--border-secondary);
+}
+
+.status-icon {
+  font-size: 2.5rem;
+  flex-shrink: 0;
+}
+
+.status-success .status-icon {
+  color: var(--success-text);
+}
+
+.status-warning .status-icon {
+  color: var(--warning-text);
+}
+
+.status-waiting .status-icon {
+  color: var(--text-tertiary);
+}
+
+.status-info {
+  flex: 1;
+}
+
+.status-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0 0 var(--space-xs) 0;
+}
+
+.status-text {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* Search Section */
 .search-section {
   margin-bottom: var(--space-2xl);
 }
@@ -362,15 +450,10 @@ function goBack() {
 .search-input:focus {
   outline: none;
   border-color: var(--brand-primary);
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+  box-shadow: 0 0 0 3px rgba(66, 184, 131, 0.1);
 }
 
-.search-input:disabled {
-  background: var(--bg-tertiary);
-  color: var(--text-tertiary);
-  cursor: not-allowed;
-}
-
+/* Students Section */
 .students-section {
   margin-bottom: var(--space-xl);
 }
@@ -383,6 +466,16 @@ function goBack() {
 
 .loading-state .spinner {
   margin: 0 auto var(--space-md);
+  width: 48px;
+  height: 48px;
+  border: 4px solid var(--border-primary);
+  border-top-color: var(--brand-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .no-results {
@@ -442,6 +535,12 @@ function goBack() {
 .student-card.selected {
   border-color: var(--brand-primary);
   background-color: #42b883;
+  color: var(--text-inverse);
+}
+
+.student-card.selected .student-name,
+.student-card.selected .student-status {
+  color: var(--text-inverse);
 }
 
 .student-avatar {
@@ -455,6 +554,11 @@ function goBack() {
   justify-content: center;
   font-weight: var(--font-weight-bold);
   font-size: var(--font-size-lg);
+  flex-shrink: 0;
+}
+
+.student-card.selected .student-avatar {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .avatar-img {
@@ -485,7 +589,8 @@ function goBack() {
 .selected-indicator {
   width: 24px;
   height: 24px;
-  color: var(--brand-primary);
+  color: var(--text-inverse);
+  flex-shrink: 0;
 }
 
 .selected-indicator svg {
@@ -494,52 +599,65 @@ function goBack() {
   stroke-width: 3;
 }
 
+/* Alert */
 .alert {
   margin-bottom: var(--space-lg);
+  padding: var(--space-md) var(--space-lg);
+  border-radius: var(--radius-lg);
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all var(--transition-fast);
 }
 
-.no-lunch-state {
-  text-align: center;
-  padding: var(--space-3xl);
+.alert:hover {
+  opacity: 0.9;
 }
 
-.no-lunch-icon {
-  font-size: 4rem;
-  margin-bottom: var(--space-lg);
-  filter: grayscale(1);
+.alert-success {
+  background: var(--success-bg);
+  color: var(--success-text);
+  border: 1px solid var(--success-border);
 }
 
-.no-lunch-state h3 {
-  color: var(--text-primary);
-  margin-bottom: var(--space-sm);
+.alert-error {
+  background: var(--error-bg);
+  color: var(--error-text);
+  border: 1px solid var(--error-border);
 }
 
-.no-lunch-state p {
-  color: var(--text-secondary);
-  margin-bottom: var(--space-xl);
+.alert-close {
+  font-size: 1.5rem;
+  font-weight: bold;
+  opacity: 0.5;
+  margin-left: var(--space-md);
 }
 
-.gift-lunch-footer {
+/* Footer */
+.card-assignment-footer {
   padding: var(--space-xl) var(--space-2xl);
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-primary);
   text-align: center;
 }
 
-.gift-btn {
+.assign-btn {
   width: 100%;
   max-width: 300px;
   margin-bottom: var(--space-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
 }
 
 .btn-icon {
   width: 20px;
   height: 20px;
-  stroke-width: 2;
 }
 
-.gift-disclaimer {
+.assign-disclaimer {
   font-size: var(--font-size-sm);
   color: var(--text-tertiary);
   margin: 0;
@@ -547,17 +665,17 @@ function goBack() {
 
 /* Responsive */
 @media (max-width: 640px) {
-  .gift-lunch-main {
+  .card-assignment-main {
     padding: var(--space-md);
   }
 
-  .gift-lunch-header,
-  .gift-lunch-content,
-  .gift-lunch-footer {
+  .card-assignment-header,
+  .card-assignment-content,
+  .card-assignment-footer {
     padding: var(--space-lg);
   }
 
-  .gift-lunch-title {
+  .card-assignment-title {
     font-size: var(--font-size-2xl);
   }
 
@@ -570,5 +688,30 @@ function goBack() {
     height: 40px;
     font-size: var(--font-size-base);
   }
+
+  .card-status-card {
+    padding: var(--space-lg);
+  }
+
+  .status-icon {
+    font-size: 2rem;
+  }
+}
+
+/* Fade-in animation */
+.fade-in {
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>
+

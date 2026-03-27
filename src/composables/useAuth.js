@@ -2,25 +2,25 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '../utils/api.js';
+import {setLoggingOut} from "@/router/index.js";
 
 // Global state that persists across component instances
-const isAuthenticated = ref(false);
+const isAuthenticated = ref(document.cookie.includes('access_token_cookie'));
 const user = ref({
   name: '',
   email: '',
-  picture: ''
+  picture: '',
+  isAdmin: false
 });
 
 // Initialize auth state from localStorage immediately
 function initAuthState() {
-  const authFlag = localStorage.getItem('is_authenticated');
-  isAuthenticated.value = !!authFlag;
-
-  if (authFlag) {
+  if (isAuthenticated.value) {
     user.value = {
       name: localStorage.getItem('user_name') || '',
       email: localStorage.getItem('user_email') || '',
-      picture: localStorage.getItem('picture') || ''
+      picture: localStorage.getItem('picture') || '',
+      isAdmin: localStorage.getItem('user_is_admin') === 'true'
     };
   }
 }
@@ -31,49 +31,50 @@ initAuthState();
 export function useAuth() {
   const router = useRouter();
 
-  // Set authentication data
-  function setAuth(userData) {
-    isAuthenticated.value = true;
-    user.value = userData;
+    function setAuth(userData) {
+        isAuthenticated.value = true;
+        user.value = {
+            name: userData.name || '',
+            email: userData.email || '',
+            picture: userData.picture || '',
+            isAdmin: Boolean(userData.isAdmin)
+        };
 
-    localStorage.setItem('is_authenticated', 'true');
-    localStorage.setItem('user_name', userData.name || '');
-    localStorage.setItem('user_email', userData.email || '');
-    localStorage.setItem('picture', userData.picture || '');
-  }
-
-  // Clear authentication data
-  function clearAuth() {
-    isAuthenticated.value = false;
-    user.value = { name: '', email: '', picture: '' };
-
-    localStorage.removeItem('is_authenticated');
-    localStorage.removeItem('user_name');
-    localStorage.removeItem('user_email');
-    localStorage.removeItem('picture');
-    localStorage.removeItem('lunchNumber');
-  }
-
-  // Check if user is authenticated
-  async function checkAuth() {
-    try {
-      await api.getUserInfo();
-      return true;
-    } catch (error) {
-      clearAuth();
-      return false;
+        localStorage.setItem('user_name', user.value.name);
+        localStorage.setItem('user_email', user.value.email);
+        localStorage.setItem('picture', user.value.picture);
+        localStorage.setItem('user_is_admin', String(user.value.isAdmin));
     }
+    
+    function clearAuth() {
+        isAuthenticated.value = false;
+        user.value = { name: '', email: '', picture: '', isAdmin: false };
+
+        localStorage.removeItem('user_name');
+        localStorage.removeItem('user_email');
+        localStorage.removeItem('picture');
+        localStorage.removeItem('user_is_admin');
+        localStorage.removeItem('lunchNumber');
+    }
+
+
+    // Check if user is authenticated
+  async function checkAuth() {
+      return isAuthenticated.value;
   }
 
   // Logout function
   async function logout() {
+      setLoggingOut(true);
+
     try {
       await api.logout();
+      clearAuth();
+      await router.push('/');
     } catch (error) {
       console.error('Logout error:', error);
-    } finally {
-      clearAuth();
-      router.push('/');
+      await router.push('/server-error');
+      setLoggingOut(false);
     }
   }
 
