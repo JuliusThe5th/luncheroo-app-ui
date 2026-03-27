@@ -20,7 +20,7 @@ function initAuthState() {
       name: localStorage.getItem('user_name') || '',
       email: localStorage.getItem('user_email') || '',
       picture: localStorage.getItem('picture') || '',
-      isAdmin: localStorage.getItem('user_is_admin') === 'true'
+      isAdmin: false  // never loaded from localStorage — set only from server responses
     };
   }
 }
@@ -43,7 +43,7 @@ export function useAuth() {
         localStorage.setItem('user_name', user.value.name);
         localStorage.setItem('user_email', user.value.email);
         localStorage.setItem('picture', user.value.picture);
-        localStorage.setItem('user_is_admin', String(user.value.isAdmin));
+        // isAdmin is intentionally NOT written to localStorage to prevent spoofing
     }
     
     function clearAuth() {

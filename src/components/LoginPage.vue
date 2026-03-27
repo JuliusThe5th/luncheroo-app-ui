@@ -18,8 +18,11 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { useAuth } from '../composables/useAuth.js';
+import { setJWTToken, socketAPI } from '../utils/socket.js';
 
 const router = useRouter();
+const { setAuth } = useAuth();
 const loginError = ref('');
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
@@ -71,67 +74,40 @@ async function handleOAuthResponse(tokenResponse) {
   }
 
   try {
-    // Exchange the token for user info
-    const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: {
-        'Authorization': `Bearer ${tokenResponse.access_token}`
-      }
-    });
-
-    if (!userInfoResponse.ok) {
-      throw new Error('Failed to get user info');
-    }
-
-    const userInfo = await userInfoResponse.json();
-
-    // Log user info for debugging
-    console.log('User info from Google:', userInfo);
-
-    // Send user info to your backend
-    const verificationResponse = await fetch(`/api/verify-token`, {
+    // Send the actual Google access token to the backend so it can verify
+    // identity with Google directly — never trust client-supplied user data.
+    const verificationResponse = await fetch('/api/verify-token', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        email: userInfo.email,
-        name: userInfo.name,
-        sub: userInfo.sub, // Google's user ID
-        picture: userInfo.picture
-      })
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ googleToken: tokenResponse.access_token })
     });
 
-    // Check if response is ok before trying to parse JSON
     if (!verificationResponse.ok) {
-      // Try to get the error message from response
       const errorText = await verificationResponse.text();
-      console.error('Verification response error:', errorText);
-      throw new Error(`Token verification failed: ${verificationResponse.status} ${verificationResponse.statusText}`);
+      throw new Error(`Token verification failed: ${verificationResponse.status} ${verificationResponse.statusText} — ${errorText}`);
     }
 
-    // Log the raw response for debugging
-    const responseText = await verificationResponse.text();
-    console.log('Raw verification response:', responseText);
-
-    // Parse the response as JSON if it's not empty
-    let authData;
-    try {
-      authData = responseText ? JSON.parse(responseText) : {};
-    } catch (e) {
-      console.error('Error parsing JSON response:', e);
-      throw new Error('Invalid response from server');
-    }
+    const authData = await verificationResponse.json();
 
     if (!authData.token) {
       throw new Error('No token received from server');
     }
 
-    // Store token in localStorage instead of using cookies
+    // Persist the signed token and wire up in-app auth state.
+    // is_admin comes from the server and is kept in memory only (not localStorage).
     localStorage.setItem('auth_token', authData.token);
-    localStorage.setItem('user_name', userInfo.name);
+    setJWTToken(authData.token);
+    socketAPI.connect(authData.token);
 
-    // Redirect to dashboard
-    router.push('/dashboard');
+    setAuth({
+      name: authData.name,
+      email: authData.email,
+      picture: authData.picture,
+      isAdmin: authData.is_admin  // server-verified; never written to localStorage
+    });
+
+    router.push(authData.is_admin ? '/admin' : '/dashboard');
   } catch (error) {
     console.error('Authentication error:', error);
     loginError.value = `Authentication failed: ${error.message}`;
